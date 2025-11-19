@@ -37,7 +37,7 @@ export default function MainNav() {
       <SidebarContent>
         <SidebarMenu>
           <SidebarMenuItem>
-            <Link href="/" legacyBehavior passHref>
+            <Link href="/">
               <SidebarMenuButton isActive={pathname === '/'} tooltip="Home">
                 <Home />
                 <span>Home</span>
@@ -45,7 +45,7 @@ export default function MainNav() {
             </Link>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <Link href="/todo" legacyBehavior passHref>
+            <Link href="/todo">
               <SidebarMenuButton isActive={pathname === '/todo'} tooltip="Todo">
                 <ListChecks />
                 <span>Todo</span>
