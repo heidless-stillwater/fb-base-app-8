@@ -19,5 +19,18 @@ service firebase.storage {
                     && request.resource.size < 5 * 1024 * 1024 // Max 5MB
                     && request.resource.contentType.matches('image/.*|application/pdf|text/.*');
     }
+
+    // Public path for contact form attachments
+    match /fb-7-message-attachments/{allPaths=**} {
+        // Allow anyone to write to this path, but with restrictions.
+        // This is for public contact form submissions.
+        allow write: if request.resource.size < 10 * 1024 * 1024 // Max 10MB
+                      && (request.resource.contentType.matches('image/.*') ||
+                          request.resource.contentType.matches('application/pdf') ||
+                          request.resource.contentType.matches('text/plain'));
+        
+        // Disallow reads by default. Access should be handled via download URLs stored in Firestore.
+        allow read: if false;
+    }
   }
 }

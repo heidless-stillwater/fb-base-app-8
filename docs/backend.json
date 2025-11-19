@@ -165,6 +165,15 @@
           "type": "string",
           "description": "Date and time when the message was submitted.",
           "format": "date-time"
+        },
+        "attachmentUrl": {
+          "type": "string",
+          "description": "URL of the uploaded attachment file in Firebase Storage.",
+          "format": "uri"
+        },
+        "attachmentFileName": {
+          "type": "string",
+          "description": "Name of the uploaded attachment file."
         }
       },
       "required": [
