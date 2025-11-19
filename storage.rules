@@ -32,5 +32,14 @@ service firebase.storage {
         // Disallow reads by default. Access should be handled via download URLs stored in Firestore.
         allow read: if false;
     }
+
+    // Rules for the user-uploads folder used by the NanoProcessor
+    match /user-uploads/{uid}/{filename} {
+      // Allow any authenticated user to read (download) any file.
+      allow read: if request.auth != null;
+
+      // Allow write (create, update, delete) only if the user's UID matches the one in the path.
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
   }
 }
