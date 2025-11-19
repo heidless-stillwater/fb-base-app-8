@@ -15,9 +15,7 @@ import {
   ChevronRight,
   HomeIcon,
   Loader2,
-  ImageIcon,
-  View,
-  Check,
+  List,
 } from "lucide-react";
 import { format } from "date-fns";
 import {
@@ -80,6 +78,7 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { useUser, useFirestore, useStorage, useCollection, useMemoFirebase } from "@/firebase";
 import { cn } from "@/lib/utils";
+import { Grid, View } from "lucide-react";
 
 export interface FileSystemNode {
   id: string;
@@ -118,7 +117,7 @@ type DialogState =
   | { type: "delete"; node: FileSystemNode }
   | null;
 
-type ViewMode = "small" | "medium" | "large";
+type ViewMode = "small" | "medium" | "large" | "list";
 
 
 const GridItem = ({ node, onNodeClick, onDownload, onOpenDialog } : { node: FileSystemNode, onNodeClick: (node: FileSystemNode) => void, onDownload: (node: FileNode) => void, onOpenDialog: (state: DialogState) => void }) => {
@@ -191,6 +190,75 @@ const GridItem = ({ node, onNodeClick, onDownload, onOpenDialog } : { node: File
         </Card>
     );
 };
+
+const ListItem = ({ node, onNodeClick, onDownload, onOpenDialog }: { node: FileSystemNode; onNodeClick: (node: FileSystemNode) => void; onDownload: (node: FileNode) => void; onOpenDialog: (state: DialogState) => void; }) => {
+    return (
+      <div
+        className="flex items-center w-full px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer group"
+        onClick={() => onNodeClick(node)}
+      >
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          {node.type === "folder" ? (
+            <Folder className="h-5 w-5 text-muted-foreground" />
+          ) : (
+            <FileIcon className="h-5 w-5 text-muted-foreground" />
+          )}
+          <span className="truncate text-sm font-medium">{node.name}</span>
+        </div>
+        <div className="hidden sm:block text-sm text-muted-foreground w-48">
+          {format(new Date(node.lastModified.toString()), "MMM dd, yyyy")}
+        </div>
+        <div className="hidden md:block text-sm text-muted-foreground w-32">
+          {node.type === "file" && node.size ? formatBytes(node.size) : "—"}
+        </div>
+        <div className="ml-auto">
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <MoreVertical className="h-4 w-4" />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                    {node.type === "file" && (
+                        <DropdownMenuItem onSelect={() => onDownload(node as FileNode)}>
+                            <Download className="mr-2 h-4 w-4" />
+                            Download
+                        </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem onSelect={() => onOpenDialog({ type: "rename", node })}>
+                        <Edit className="mr-2 h-4 w-4" />
+                        Rename
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="text-destructive" onSelect={() => onOpenDialog({ type: "delete", node })}>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        </div>
+      </div>
+    );
+};
+
+const ListHeader = () => (
+    <div className="flex items-center w-full px-2 py-1.5 border-b sticky top-0 bg-background/95 backdrop-blur-sm z-10">
+      <div className="flex-1 min-w-0">
+        <span className="text-sm font-semibold text-muted-foreground">Name</span>
+      </div>
+      <div className="hidden sm:block text-sm font-semibold text-muted-foreground w-48">
+        Last Modified
+      </div>
+      <div className="hidden md:block text-sm font-semibold text-muted-foreground w-32">
+        File Size
+      </div>
+      <div className="w-7 h-7 ml-auto" />
+    </div>
+);
 
 
 export default function FileManager() {
@@ -533,7 +601,15 @@ export default function FileManager() {
       small: "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
       medium: "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5",
       large: "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4",
+      list: "flex flex-col gap-1",
   };
+
+  const CurrentViewIcon = useMemo(() => {
+    switch(view) {
+        case 'list': return List;
+        default: return Grid;
+    }
+  }, [view]);
 
   return (
     <>
@@ -547,17 +623,18 @@ export default function FileManager() {
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <Button variant="outline">
-                        <View className="mr-2 h-4 w-4" />
+                        <CurrentViewIcon className="mr-2 h-4 w-4" />
                         View
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                    <DropdownMenuLabel>Grid View</DropdownMenuLabel>
+                    <DropdownMenuLabel>Display Options</DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     <DropdownMenuRadioGroup value={view} onValueChange={(v) => setView(v as ViewMode)}>
-                        <DropdownMenuRadioItem value="small">Small</DropdownMenuRadioItem>
-                        <DropdownMenuRadioItem value="medium">Medium</DropdownMenuRadioItem>
-                        <DropdownMenuRadioItem value="large">Large</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="small">Small Grid</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="medium">Medium Grid</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="large">Large Grid</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="list">List</DropdownMenuRadioItem>
                     </DropdownMenuRadioGroup>
                 </DropdownMenuContent>
             </DropdownMenu>
@@ -605,23 +682,36 @@ export default function FileManager() {
             ))}
           </div>
 
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto relative">
             {isLoading ? (
               <div className="flex items-center justify-center h-full">
                 <Loader2 className="mx-auto h-8 w-8 animate-spin" />
               </div>
             ) : (
-              <div className={cn("grid gap-4", viewClasses[view])}>
-                {currentNodes.map((node) => (
-                  <GridItem 
-                    key={node.id} 
-                    node={node}
-                    onNodeClick={handleNodeClick}
-                    onDownload={handleDownload}
-                    onOpenDialog={handleOpenDialog}
-                  />
-                ))}
-              </div>
+              <>
+                {view === 'list' && currentNodes.length > 0 && <ListHeader />}
+                <div className={cn("grid gap-4", viewClasses[view])}>
+                    {currentNodes.map((node) => 
+                        view === 'list' ? (
+                            <ListItem
+                                key={node.id}
+                                node={node}
+                                onNodeClick={handleNodeClick}
+                                onDownload={handleDownload}
+                                onOpenDialog={handleOpenDialog}
+                            />
+                        ) : (
+                            <GridItem 
+                                key={node.id} 
+                                node={node}
+                                onNodeClick={handleNodeClick}
+                                onDownload={handleDownload}
+                                onOpenDialog={handleOpenDialog}
+                            />
+                        )
+                    )}
+                </div>
+              </>
             )}
             
             {uploadingFiles.length > 0 && (
@@ -657,3 +747,5 @@ export default function FileManager() {
     </>
   );
 }
+
+    
