@@ -1,6 +1,7 @@
 'use client';
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import TodoProcessor from "@/components/todo-processor";
 
 export default function TodoPage() {
     return (
@@ -10,7 +11,7 @@ export default function TodoPage() {
                     <CardTitle>Todo List</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <p>This is where your todo list will be. Coming soon!</p>
+                    <TodoProcessor />
                 </CardContent>
             </Card>
         </div>
