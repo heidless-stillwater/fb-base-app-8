@@ -8,6 +8,9 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Loader2, Plus, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
+
 
 interface Todo {
     id: string;
@@ -32,45 +35,63 @@ export default function TodoProcessor() {
 
     const handleAddTodo = async () => {
         if (!newTodo.trim() || !user) return;
+        const todoData = {
+            text: newTodo,
+            completed: false,
+            createdAt: serverTimestamp(),
+            userId: user.uid,
+        };
 
-        try {
-            await addDoc(collection(firestore, `users/${user.uid}/todos`), {
-                text: newTodo,
-                completed: false,
-                createdAt: serverTimestamp(),
-                userId: user.uid,
+        const todosCollection = collection(firestore, `users/${user.uid}/todos`);
+
+        addDoc(todosCollection, todoData)
+            .then(() => {
+                setNewTodo('');
+                toast({
+                    title: 'Success',
+                    description: 'Todo added.',
+                });
+            })
+            .catch((error) => {
+                console.error('Error adding todo: ', error);
+                const permissionError = new FirestorePermissionError({
+                    path: todosCollection.path,
+                    operation: 'create',
+                    requestResourceData: todoData,
+                });
+                errorEmitter.emit('permission-error', permissionError);
+
+                toast({
+                    variant: 'destructive',
+                    title: 'Error',
+                    description: 'Could not add todo. Check permissions.',
+                });
             });
-            setNewTodo('');
-            toast({
-                title: 'Success',
-                description: 'Todo added.',
-            });
-        } catch (error) {
-            console.error('Error adding todo: ', error);
-            toast({
-                variant: 'destructive',
-                title: 'Error',
-                description: 'Could not add todo.',
-            });
-        }
     };
 
     const handleDeleteTodo = async (todoId: string) => {
         if (!user) return;
-        try {
-            await deleteDoc(doc(firestore, `users/${user.uid}/todos`, todoId));
-            toast({
-                title: 'Success',
-                description: 'Todo deleted.',
+        const todoDocRef = doc(firestore, `users/${user.uid}/todos`, todoId);
+        deleteDoc(todoDocRef)
+            .then(() => {
+                toast({
+                    title: 'Success',
+                    description: 'Todo deleted.',
+                });
+            })
+            .catch((error) => {
+                console.error('Error deleting todo: ', error);
+                 const permissionError = new FirestorePermissionError({
+                    path: todoDocRef.path,
+                    operation: 'delete',
+                });
+                errorEmitter.emit('permission-error', permissionError);
+                toast({
+                    variant: 'destructive',
+                    title: 'Error',
+                    description: 'Could not delete todo. Check permissions.',
+                });
             });
-        } catch (error) {
-            console.error('Error deleting todo: ', error);
-            toast({
-                variant: 'destructive',
-                title: 'Error',
-                description: 'Could not delete todo.',
-            });
-        }
     };
 
     return (
