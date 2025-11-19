@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useRef, ChangeEvent } from "react";
@@ -15,6 +16,8 @@ import {
   HomeIcon,
   Loader2,
   ImageIcon,
+  View,
+  Check,
 } from "lucide-react";
 import { format } from "date-fns";
 import {
@@ -46,18 +49,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
-  Table,
-  TableHeader,
-  TableRow,
-  TableHead,
-  TableBody,
-  TableCell,
-} from "@/components/ui/table";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
@@ -80,6 +78,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { useUser, useFirestore, useStorage, useCollection, useMemoFirebase } from "@/firebase";
+import { cn } from "@/lib/utils";
 
 export interface FileSystemNode {
   id: string;
@@ -118,6 +117,74 @@ type DialogState =
   | { type: "delete"; node: FileSystemNode }
   | null;
 
+type ViewMode = "small" | "medium" | "large";
+
+
+const GridItem = ({ node, onNodeClick, onDownload, onOpenDialog } : { node: FileSystemNode, onNodeClick: (node: FileSystemNode) => void, onDownload: (node: FileNode) => void, onOpenDialog: (state: DialogState) => void }) => {
+    const isImage = node.type === 'file' && (node as FileNode).fileType.startsWith('image/') && (node as FileNode).downloadURL;
+    
+    return (
+        <Card 
+            className="w-full cursor-pointer hover:shadow-md transition-shadow group"
+            onClick={() => onNodeClick(node)}
+        >
+            <CardContent className="p-0">
+                <div className="aspect-square w-full flex items-center justify-center bg-muted rounded-t-lg overflow-hidden">
+                    {node.type === 'folder' ? (
+                        <Folder className="w-1/2 h-1/2 text-muted-foreground" />
+                    ) : isImage ? (
+                        <Image src={(node as FileNode).downloadURL!} alt={node.name} fill className="object-cover" />
+                    ) : (
+                        <FileIcon className="w-1/2 h-1/2 text-muted-foreground" />
+                    )}
+                </div>
+            </CardContent>
+            <div className="p-2 sm:p-3 flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <div className="text-muted-foreground">
+                        {node.type === 'folder' ? <Folder className="h-4 w-4" /> : <FileIcon className="h-4 w-4" />}
+                    </div>
+                    <div className="flex-1 truncate">
+                        <p className="font-medium text-sm truncate" title={node.name}>{node.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                            {node.type === "file" && node.size ? formatBytes(node.size) : 'Folder'}
+                        </p>
+                    </div>
+                </div>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <MoreVertical className="h-4 w-4" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                        {node.type === "file" && (
+                            <DropdownMenuItem onSelect={() => onDownload(node as FileNode)}>
+                                <Download className="mr-2 h-4 w-4" />
+                                Download
+                            </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem onSelect={() => onOpenDialog({ type: "rename", node })}>
+                            <Edit className="mr-2 h-4 w-4" />
+                            Rename
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="text-destructive" onSelect={() => onOpenDialog({ type: "delete", node })}>
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
+        </Card>
+    );
+};
+
+
 export default function FileManager() {
   const { user } = useUser();
   const firestore = useFirestore();
@@ -131,6 +198,7 @@ export default function FileManager() {
   >([]);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [view, setView] = useState<ViewMode>('small');
 
   const currentPathString = useMemo(
     () => (currentPath.length === 0 ? "/" : `/${currentPath.join("/")}`),
@@ -234,7 +302,6 @@ export default function FileManager() {
 
     try {
       await updateDoc(docRef, { name: newName, lastModified: serverTimestamp() });
-      // Note: Renaming folders does not yet update paths of children. This is a complex operation.
       toast({
         title: "Success",
         description: `Renamed "${originalNode.name}" to "${newName}".`,
@@ -262,7 +329,6 @@ export default function FileManager() {
         await deleteObject(storageRef(storage, nodeToDelete.storagePath));
       }
       await deleteDoc(docRef);
-      // Note: Deleting folders does not yet delete children. This is a complex operation.
       toast({
         title: "Success",
         description: `Deleted "${nodeToDelete.name}".`,
@@ -370,24 +436,20 @@ export default function FileManager() {
         description: `Downloading "${node.name}".`,
       });
   
-      // Fetch the file from the download URL
       const response = await fetch(node.downloadURL);
       if (!response.ok) {
         throw new Error(`Failed to fetch file: ${response.statusText}`);
       }
       const blob = await response.blob();
   
-      // Create a temporary link to trigger the download
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
       link.download = node.name;
   
-      // Append to the document, click, and then remove
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
   
-      // Clean up the object URL
       URL.revokeObjectURL(link.href);
     } catch (error) {
       console.error('Download error:', error);
@@ -408,8 +470,7 @@ export default function FileManager() {
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete "{dialogState.node.name}"
-              {dialogState.node.type === 'folder' && ' and all its contents (feature coming soon)'}. This action cannot be undone.
+              This will permanently delete "{dialogState.node.name}". This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -460,15 +521,38 @@ export default function FileManager() {
 
   const isLoading = foldersLoading || filesLoading;
 
+  const viewClasses = {
+      small: "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
+      medium: "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5",
+      large: "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4",
+  };
+
   return (
     <>
-      <Card className="shadow-lg h-full">
+      <Card className="shadow-lg h-full flex flex-col">
         <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <CardTitle className="text-2xl">Cloud Storage</CardTitle>
             <CardDescription>Manage your files and folders.</CardDescription>
           </div>
           <div className="flex gap-2">
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="outline">
+                        <View className="mr-2 h-4 w-4" />
+                        View
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                    <DropdownMenuLabel>Grid View</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuRadioGroup value={view} onValueChange={(v) => setView(v as ViewMode)}>
+                        <DropdownMenuRadioItem value="small">Small</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="medium">Medium</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="large">Large</DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+            </DropdownMenu>
             <Button onClick={() => handleOpenDialog({ type: 'create_folder' })}>
               <FolderPlus className="mr-2 h-4 w-4" /> New Folder
             </Button>
@@ -484,7 +568,7 @@ export default function FileManager() {
             />
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex-1 flex flex-col min-h-0">
           <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4 overflow-x-auto whitespace-nowrap py-1">
             <Button
               variant="ghost"
@@ -513,125 +597,45 @@ export default function FileManager() {
             ))}
           </div>
 
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[50px]"></TableHead>
-                  <TableHead className="w-[80px]">Thumbnail</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead className="hidden md:table-cell w-[150px]">
-                    Size
-                  </TableHead>
-                  <TableHead className="hidden sm:table-cell w-[200px]">
-                    Last Modified
-                  </TableHead>
-                  <TableHead className="w-[50px] text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading && (
-                  <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center">
-                      <Loader2 className="mx-auto h-8 w-8 animate-spin" />
-                    </TableCell>
-                  </TableRow>
-                )}
-                {!isLoading && currentNodes.map((node) => (
-                  <TableRow
-                    key={node.id}
-                    className="cursor-pointer"
-                    onClick={() => handleNodeClick(node)}
-                  >
-                    <TableCell className="text-muted-foreground">
-                      {node.type === "folder" ? (
-                        <Folder />
-                      ) : (
-                        <FileIcon />
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {node.type === 'file' && (node as FileNode).fileType.startsWith("image/") && (node as FileNode).downloadURL ? (
-                        <Image src={(node as FileNode).downloadURL!} alt={node.name} width={40} height={40} className="rounded-md object-cover" />
-                      ) : node.type === 'file' ? (
-                        <div className="w-10 h-10 flex items-center justify-center bg-muted rounded-md">
-                          <ImageIcon className="w-5 h-5 text-muted-foreground" />
+          <div className="flex-1 overflow-auto">
+            {isLoading ? (
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="mx-auto h-8 w-8 animate-spin" />
+              </div>
+            ) : (
+              <div className={cn("grid gap-4", viewClasses[view])}>
+                {currentNodes.map((node) => (
+                  <GridItem 
+                    key={node.id} 
+                    node={node}
+                    onNodeClick={handleNodeClick}
+                    onDownload={handleDownload}
+                    onOpenDialog={handleOpenDialog}
+                  />
+                ))}
+              </div>
+            )}
+            
+            {uploadingFiles.length > 0 && (
+                <div className="mt-4 space-y-2">
+                    {uploadingFiles.map((file) => (
+                      <div key={file.id} className="p-2 border rounded-lg">
+                        <div className="flex items-center gap-4">
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                            <span className="font-medium flex-1 truncate">{file.name}</span>
+                            <Progress value={file.progress} className="w-32" />
+                            <span className="text-sm text-muted-foreground w-12 text-right">{file.progress.toFixed(0)}%</span>
                         </div>
-                      ) : <div className="w-10 h-10"></div>}
-                    </TableCell>
-                    <TableCell className="font-medium">{node.name}</TableCell>
-                    <TableCell className="hidden md:table-cell text-muted-foreground">
-                      {node.type === "file" && node.size
-                        ? formatBytes(node.size)
-                        : ""}
-                    </TableCell>
-                    <TableCell className="hidden sm:table-cell text-muted-foreground">
-                      {node.lastModified instanceof Date && format(node.lastModified, "PPp")}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent
-                          align="end"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {node.type === "file" && (
-                            <DropdownMenuItem
-                              onSelect={() => handleDownload(node as FileNode)}
-                            >
-                              <Download className="mr-2 h-4 w-4" />
-                              Download
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem
-                            onSelect={() => handleOpenDialog({ type: "rename", node })}
-                          >
-                            <Edit className="mr-2 h-4 w-4" />
-                            Rename
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            onSelect={() => handleOpenDialog({ type: "delete", node })}
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {uploadingFiles.map((file) => (
-                  <TableRow key={file.id}>
-                    <TableCell className="text-muted-foreground">
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                    </TableCell>
-                    <TableCell colSpan={5}>
-                      <div className="flex items-center gap-4">
-                        <span className="font-medium flex-1 truncate">{file.name}</span>
-                        <Progress value={file.progress} className="w-32" />
-                        <span className="text-sm text-muted-foreground w-12 text-right">{file.progress.toFixed(0)}%</span>
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                 {!isLoading && currentNodes.length === 0 && uploadingFiles.length === 0 && (
-                    <TableRow>
-                        <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                            This folder is empty.
-                        </TableCell>
-                    </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                    ))}
+                </div>
+            )}
+
+            {!isLoading && currentNodes.length === 0 && uploadingFiles.length === 0 && (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                    This folder is empty.
+                </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -645,3 +649,5 @@ export default function FileManager() {
     </>
   );
 }
+
+    
