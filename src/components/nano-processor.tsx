@@ -194,7 +194,7 @@ export default function NanoProcessor() {
               id="prompt"
               placeholder="e.g., make the sky purple, add a dragon"
               value={prompt}
-              onChange={(e) => setPrompt(e.test_mode.value)}
+              onChange={(e) => setPrompt(e.target.value)}
               disabled={isLoading || !originalImage}
             />
           </div>
@@ -217,7 +217,7 @@ export default function NanoProcessor() {
             )}
             Transform Image
           </Button>
-          <Button disabled={true}>
+          <Button disabled={isUploadDisabled}>
             Upload Images
           </Button>
         </CardFooter>
