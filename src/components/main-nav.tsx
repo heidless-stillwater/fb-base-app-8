@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, ListChecks, LogOut } from 'lucide-react';
+import { Home, ListChecks, LogOut, Mail } from 'lucide-react';
 
 import {
   Sidebar,
@@ -49,6 +49,14 @@ export default function MainNav() {
               <SidebarMenuButton isActive={pathname === '/todo'} tooltip="Todo">
                 <ListChecks />
                 <span>Todo</span>
+              </SidebarMenuButton>
+            </Link>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <Link href="/contact">
+              <SidebarMenuButton isActive={pathname === '/contact'} tooltip="Contact">
+                <Mail />
+                <span>Contact</span>
               </SidebarMenuButton>
             </Link>
           </SidebarMenuItem>

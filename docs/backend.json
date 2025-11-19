@@ -137,6 +137,43 @@
         "completed",
         "createdAt"
       ]
+    },
+    "Message": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Message",
+      "type": "object",
+      "description": "Represents a message submitted through the contact form.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Message entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the person submitting the message."
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the person submitting the message.",
+          "format": "email"
+        },
+        "message": {
+          "type": "string",
+          "description": "The content of the message."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Date and time when the message was submitted.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "email",
+        "message",
+        "createdAt"
+      ]
     }
   },
   "auth": {
@@ -221,8 +258,24 @@
             }
           ]
         }
+      },
+      {
+        "path": "/fb-7-messages/{messageId}",
+        "definition": {
+            "entityName": "Message",
+            "schema": {
+                "$ref": "#/backend/entities/Message"
+            },
+            "description": "Stores messages from the public contact form. Open for creation by anyone.",
+            "params": [
+                {
+                    "name": "messageId",
+                    "description": "The unique identifier for the message."
+                }
+            ]
+        }
       }
     ],
-    "reasoning": "The Firestore structure is designed to ensure secure and scalable file management, following the principles of Authorization Independence, Clarity of Intent, DBAC, and QAPs. User data is stored in `/users/{userId}`.  File metadata and folders are organized under the user's document using hierarchical paths (`/users/{userId}/files/{fileId}` and `/users/{userId}/folders/{folderId}`) to represent ownership, with files stored as metadata only. This design prioritizes path-based ownership and avoids the need for complex security rules involving `get()` calls. File metadata is stored independently of the actual file content (which would be stored in Firebase Storage). This ensures that file metadata operations (listing, renaming, deleting) are fast and efficient. File and folder IDs will be generated client-side using a UUID generator. The structure supports secure list operations (QAPs) by ensuring that each collection has homogeneous security needs and uses path-based ownership, eliminating the need for filtering in rules. Folder structures are self-referential, but still isolated to the user's document space. The new Todo collection follows the same pattern of user ownership."
+    "reasoning": "The Firestore structure is designed to ensure secure and scalable file management, following the principles of Authorization Independence, Clarity of Intent, DBAC, and QAPs. User data is stored in `/users/{userId}`.  File metadata and folders are organized under the user's document using hierarchical paths (`/users/{userId}/files/{fileId}` and `/users/{userId}/folders/{folderId}`) to represent ownership, with files stored as metadata only. This design prioritizes path-based ownership and avoids the need for complex security rules involving `get()` calls. File metadata is stored independently of the actual file content (which would be stored in Firebase Storage). This ensures that file metadata operations (listing, renaming, deleting) are fast and efficient. File and folder IDs will be generated client-side using a UUID generator. The structure supports secure list operations (QAPs) by ensuring that each collection has homogeneous security needs and uses path-based ownership, eliminating the need for filtering in rules. Folder structures are self-referential, but still isolated to the user's document space. The new Todo collection follows the same pattern of user ownership. The `fb-7-messages` collection is a top-level collection to store public contact form submissions."
   }
 }
