@@ -80,7 +80,7 @@ import { Progress } from "@/components/ui/progress";
 import { useUser, useFirestore, useStorage, useCollection, useMemoFirebase } from "@/firebase";
 import { cn } from "@/lib/utils";
 import { Grid, View } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 
 export interface FileSystemNode {
   id: string;
@@ -544,64 +544,6 @@ export default function FileManager() {
     }
   };
 
-  const dialogContent = useMemo(() => {
-    if (!dialogState) return null;
-
-    if (dialogState.type === "delete") {
-      return (
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete "{dialogState.node.name}". This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={closeDialog}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteNode} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      );
-    }
-
-    const isRename = dialogState.type === 'rename';
-    const title = isRename ? `Rename "${dialogState.node.name}"` : 'Create New Folder';
-
-    return (
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-        </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="name" className="text-right">
-              Name
-            </Label>
-            <Input
-              id="name"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              className="col-span-3"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  isRename ? handleRenameNode() : handleCreateFolder();
-                }
-              }}
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={closeDialog}>Cancel</Button>
-          <Button onClick={isRename ? handleRenameNode : handleCreateFolder}>
-            {isRename ? 'Rename' : 'Create'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dialogState, inputValue]);
-
   const isLoading = foldersLoading || filesLoading;
 
   const viewClasses = {
@@ -619,7 +561,7 @@ export default function FileManager() {
   }, [view]);
 
   return (
-    <>
+    <TooltipProvider>
       <Card className="shadow-lg h-full flex flex-col">
         <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
@@ -769,14 +711,55 @@ export default function FileManager() {
       </Card>
       
       <Dialog open={!!dialogState && dialogState.type !== 'delete'} onOpenChange={(isOpen) => !isOpen && closeDialog()}>
-        {dialogContent}
+         {dialogState?.type === 'create_folder' || dialogState?.type === 'rename' ? (
+            <DialogContent>
+                <DialogHeader>
+                <DialogTitle>{dialogState.type === 'rename' ? `Rename "${dialogState.node.name}"` : 'Create New Folder'}</DialogTitle>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="name" className="text-right">
+                    Name
+                    </Label>
+                    <Input
+                    id="name"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    className="col-span-3"
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                        e.preventDefault();
+                        dialogState.type === 'rename' ? handleRenameNode() : handleCreateFolder();
+                        }
+                    }}
+                    />
+                </div>
+                </div>
+                <DialogFooter>
+                <Button variant="outline" onClick={closeDialog}>Cancel</Button>
+                <Button onClick={dialogState.type === 'rename' ? handleRenameNode : handleCreateFolder}>
+                    {dialogState.type === 'rename' ? 'Rename' : 'Create'}
+                </Button>
+                </DialogFooter>
+            </DialogContent>
+        ) : null}
       </Dialog>
       <AlertDialog open={!!dialogState && dialogState.type === 'delete'} onOpenChange={(isOpen) => !isOpen && closeDialog()}>
-        {dialogContent}
+        {dialogState?.type === 'delete' ? (
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                    This will permanently delete "{dialogState.node.name}". This action cannot be undone.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={closeDialog}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDeleteNode} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        ) : null}
       </AlertDialog>
-    </>
+    </TooltipProvider>
   );
 }
-
-    
-
