@@ -2,7 +2,7 @@ import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { FirebaseClientProvider } from '@/firebase';
-import { SidebarProvider } from '@/components/ui/sidebar';
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import MainNav from '@/components/main-nav';
 import { ThemeProvider } from '@/components/theme-provider';
 
@@ -33,9 +33,9 @@ export default function RootLayout({
           <FirebaseClientProvider>
             <SidebarProvider>
               <MainNav />
-              <main className="h-full">
+              <SidebarInset>
                 {children}
-              </main>
+              </SidebarInset>
             </SidebarProvider>
           </FirebaseClientProvider>
           <Toaster />

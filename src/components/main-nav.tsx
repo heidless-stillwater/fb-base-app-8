@@ -13,6 +13,7 @@ import {
   SidebarMenuButton,
   SidebarTrigger,
   SidebarFooter,
+  SidebarRail,
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { useAuth, useUser } from '@/firebase';
@@ -29,7 +30,8 @@ export default function MainNav() {
   }
 
   return (
-    <Sidebar>
+    <Sidebar collapsible="icon">
+        <SidebarRail />
       <SidebarHeader>
         <div className="flex items-center gap-2">
             <SidebarTrigger />
