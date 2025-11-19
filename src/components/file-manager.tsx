@@ -130,11 +130,18 @@ const GridItem = ({ node, onNodeClick, onDownload, onOpenDialog } : { node: File
             onClick={() => onNodeClick(node)}
         >
             <CardContent className="p-0">
-                <div className="aspect-square w-full flex items-center justify-center bg-muted rounded-t-lg overflow-hidden">
+                <div className="aspect-square w-full flex items-center justify-center bg-muted rounded-t-lg overflow-hidden relative">
                     {node.type === 'folder' ? (
                         <Folder className="w-1/2 h-1/2 text-muted-foreground" />
                     ) : isImage ? (
-                        <Image src={(node as FileNode).downloadURL!} alt={node.name} fill className="object-cover" />
+                        <Image 
+                            src={(node as FileNode).downloadURL!} 
+                            alt={node.name}
+                            width={200}
+                            height={200}
+                            sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, (max-width: 1280px) 20vw, 16vw"
+                            className="object-cover w-full h-full"
+                        />
                     ) : (
                         <FileIcon className="w-1/2 h-1/2 text-muted-foreground" />
                     )}
