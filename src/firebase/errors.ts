@@ -78,6 +78,8 @@ function buildRequestObject(context: SecurityRuleContext): SecurityRuleRequest {
   let authObject: FirebaseAuthObject | null = null;
   try {
     // Safely attempt to get the current user.
+    // NOTE: This might not work in all environments (e.g., server-side rendering without context).
+    // It's a best-effort approach for client-side debugging.
     const firebaseAuth = getAuth();
     const currentUser = firebaseAuth.currentUser;
     if (currentUser) {
@@ -92,7 +94,7 @@ function buildRequestObject(context: SecurityRuleContext): SecurityRuleRequest {
     auth: authObject,
     method: context.operation,
     path: `/databases/(default)/documents/${context.path}`,
-    resource: context.requestResourceData ? { data: context.requestResourceData } : undefined,
+    ...(context.requestResourceData && { resource: { data: context.requestResourceData } }),
   };
 }
 

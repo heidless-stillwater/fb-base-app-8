@@ -4,10 +4,12 @@ import { useState } from 'react';
 import {
   useUser,
   useFirestore,
+  useStorage,
   useCollection,
   useMemoFirebase,
 } from '@/firebase';
-import { collection, query, orderBy } from 'firebase/firestore';
+import { collection, query, orderBy, doc, deleteDoc } from 'firebase/firestore';
+import { ref as storageRef, deleteObject } from 'firebase/storage';
 import Image from 'next/image';
 import {
   Card,
@@ -26,8 +28,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from '@/components/ui/button';
-import { Loader2, ArrowRight, MoreVertical, Download, LayoutGrid, List } from 'lucide-react';
+import { Loader2, ArrowRight, MoreVertical, Download, LayoutGrid, List, Trash2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -36,6 +48,8 @@ interface NanoRecord {
   id: string;
   originalImageUrl: string;
   transformedImageUrl: string;
+  originalStoragePath: string;
+  transformedStoragePath: string;
   originalFileName: string;
   timestamp: {
     seconds: number;
@@ -83,12 +97,14 @@ const GridAndDetailItem = ({
   isSelected,
   onSelect,
   onDownload,
+  onDelete,
 }: {
   record: NanoRecord;
   view: ViewMode;
   isSelected: boolean;
   onSelect: () => void;
   onDownload: (imageUrl: string, fileName: string) => void;
+  onDelete: (record: NanoRecord) => void;
 }) => (
     <div
         className={cn(
@@ -193,6 +209,11 @@ const GridAndDetailItem = ({
                 <Download className="mr-2 h-4 w-4" />
                 Download Transformed
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="text-destructive" onSelect={() => onDelete(record)}>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete
+                </DropdownMenuItem>
             </DropdownMenuContent>
             </DropdownMenu>
         </div>
@@ -204,11 +225,13 @@ const ListItem = ({
     isSelected,
     onSelect,
     onDownload,
+    onDelete,
   }: {
     record: NanoRecord;
     isSelected: boolean;
     onSelect: () => void;
     onDownload: (imageUrl: string, fileName: string) => void;
+    onDelete: (record: NanoRecord) => void;
   }) => (
     <div
       className={cn(
@@ -252,6 +275,11 @@ const ListItem = ({
               <Download className="mr-2 h-4 w-4" />
               Download Transformed
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="text-destructive" onSelect={() => onDelete(record)}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -261,9 +289,11 @@ const ListItem = ({
 export default function NanoGallery() {
   const { user } = useUser();
   const firestore = useFirestore();
+  const storage = useStorage();
   const { toast } = useToast();
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
   const [view, setView] = useState<ViewMode>('detail');
+  const [recordToDelete, setRecordToDelete] = useState<NanoRecord | null>(null);
 
 
   const nanoRecordsQuery = useMemoFirebase(() => {
@@ -280,6 +310,43 @@ export default function NanoGallery() {
     error,
   } = useCollection<NanoRecord>(nanoRecordsQuery);
 
+  const handleDeleteRecord = async () => {
+    if (!recordToDelete || !user) return;
+    
+    const record = recordToDelete;
+    setRecordToDelete(null); // Close dialog
+
+    try {
+        // 1. Delete Firestore document
+        const docRef = doc(firestore, `users/${user.uid}/nanoRecords`, record.id);
+        await deleteDoc(docRef);
+
+        // 2. Delete original image from Storage
+        if (record.originalStoragePath) {
+            await deleteObject(storageRef(storage, record.originalStoragePath));
+        }
+
+        // 3. Delete transformed image from Storage
+        if (record.transformedStoragePath) {
+            await deleteObject(storageRef(storage, record.transformedStoragePath));
+        }
+
+        toast({
+            title: "Success",
+            description: `Deleted transformation record for "${record.originalFileName}".`,
+        });
+
+    } catch (e) {
+        console.error("Error deleting record:", e);
+        toast({
+            title: "Error",
+            description: "Could not delete record. See console for details.",
+            variant: "destructive",
+        });
+    }
+  };
+
+
   const viewClasses: Record<ViewMode, string> = {
     list: 'flex flex-col gap-1',
     detail: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
@@ -290,76 +357,95 @@ export default function NanoGallery() {
   };
 
   return (
-    <Card>
-      <CardHeader className="flex-row items-start justify-between">
-        <div>
-            <CardTitle>Transformation History</CardTitle>
-            <CardDescription>
-            A gallery of your past image transformations. Click an item to select it.
-            </CardDescription>
-        </div>
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon">
-                    {view === 'list' ? <List className="h-4 w-4" /> : <LayoutGrid className="h-4 w-4" />}
-                    <span className="sr-only">View Options</span>
-                </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-                <DropdownMenuLabel>View Mode</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuRadioGroup value={view} onValueChange={(v) => setView(v as ViewMode)}>
-                    <DropdownMenuRadioItem value="list">List</DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="detail">Details</DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="extra-large">Extra Large Grid</DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="large">Large Grid</DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="medium">Medium Grid</DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="small">Small Grid</DropdownMenuRadioItem>
-                </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-        </DropdownMenu>
-      </CardHeader>
-      <CardContent>
-        {recordsLoading && (
-          <div className="flex items-center justify-center h-48">
-            <Loader2 className="h-8 w-8 animate-spin" />
+    <>
+      <Card>
+        <CardHeader className="flex-row items-start justify-between">
+          <div>
+              <CardTitle>Transformation History</CardTitle>
+              <CardDescription>
+              A gallery of your past image transformations. Click an item to select it.
+              </CardDescription>
           </div>
-        )}
-        {error && (
-          <div className="text-destructive text-center">
-            Error loading gallery: {error.message}
-          </div>
-        )}
-        {!recordsLoading && !records?.length && (
-          <div className="flex items-center justify-center h-48 rounded-md border border-dashed text-sm text-muted-foreground">
-            <p>Your transformation history is empty.</p>
-          </div>
-        )}
-        {!recordsLoading && records && records.length > 0 && (
-          <div className={cn(view !== 'list' && 'grid', "gap-4", viewClasses[view])}>
-             {records.map((record) =>
-              view === 'list' ? (
-                <ListItem
-                  key={record.id}
-                  record={record}
-                  isSelected={selectedRecordId === record.id}
-                  onSelect={() => setSelectedRecordId(record.id)}
-                  onDownload={(imageUrl, fileName) => handleDownload(imageUrl, fileName, toast)}
-                />
-              ) : (
-                <GridAndDetailItem
-                  key={record.id}
-                  record={record}
-                  view={view}
-                  isSelected={selectedRecordId === record.id}
-                  onSelect={() => setSelectedRecordId(record.id)}
-                  onDownload={(imageUrl, fileName) => handleDownload(imageUrl, fileName, toast)}
-                />
-              )
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+          <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon">
+                      {view === 'list' ? <List className="h-4 w-4" /> : <LayoutGrid className="h-4 w-4" />}
+                      <span className="sr-only">View Options</span>
+                  </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                  <DropdownMenuLabel>View Mode</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuRadioGroup value={view} onValueChange={(v) => setView(v as ViewMode)}>
+                      <DropdownMenuRadioItem value="list">List</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="detail">Details</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="extra-large">Extra Large Grid</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="large">Large Grid</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="medium">Medium Grid</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="small">Small Grid</DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+          </DropdownMenu>
+        </CardHeader>
+        <CardContent>
+          {recordsLoading && (
+            <div className="flex items-center justify-center h-48">
+              <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+          )}
+          {error && (
+            <div className="text-destructive text-center">
+              Error loading gallery: {error.message}
+            </div>
+          )}
+          {!recordsLoading && !records?.length && (
+            <div className="flex items-center justify-center h-48 rounded-md border border-dashed text-sm text-muted-foreground">
+              <p>Your transformation history is empty.</p>
+            </div>
+          )}
+          {!recordsLoading && records && records.length > 0 && (
+            <div className={cn(view !== 'list' && 'grid', "gap-4", viewClasses[view])}>
+               {records.map((record) =>
+                view === 'list' ? (
+                  <ListItem
+                    key={record.id}
+                    record={record}
+                    isSelected={selectedRecordId === record.id}
+                    onSelect={() => setSelectedRecordId(record.id)}
+                    onDownload={(imageUrl, fileName) => handleDownload(imageUrl, fileName, toast)}
+                    onDelete={setRecordToDelete}
+                  />
+                ) : (
+                  <GridAndDetailItem
+                    key={record.id}
+                    record={record}
+                    view={view}
+                    isSelected={selectedRecordId === record.id}
+                    onSelect={() => setSelectedRecordId(record.id)}
+                    onDownload={(imageUrl, fileName) => handleDownload(imageUrl, fileName, toast)}
+                    onDelete={setRecordToDelete}
+                  />
+                )
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      <AlertDialog open={!!recordToDelete} onOpenChange={(isOpen) => !isOpen && setRecordToDelete(null)}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                This will permanently delete the transformation record for "{recordToDelete?.originalFileName}".
+                The original and transformed images will also be deleted from storage. This action cannot be undone.
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setRecordToDelete(null)}>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDeleteRecord} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

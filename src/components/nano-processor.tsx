@@ -123,8 +123,8 @@ export default function NanoProcessor() {
       toast({ title: 'Step 1/4: Uploading Original Image...'});
       const originalFile = originalImage.file;
       const timestamp = Date.now();
-      const originalFileName = `${timestamp}-original-${originalFile.name}`;
-      const originalStoragePath = `user-uploads/${user.uid}/${originalFileName}`;
+      const originalFileNameForStorage = `${timestamp}-original-${originalFile.name}`;
+      const originalStoragePath = `user-uploads/${user.uid}/${originalFileNameForStorage}`;
       const originalStorageRef = storageRef(storage, originalStoragePath);
       const originalUploadTask = uploadBytesResumable(originalStorageRef, originalFile);
       
@@ -157,8 +157,8 @@ export default function NanoProcessor() {
 
       // 3. Upload transformed image
       const transformedBlob = await dataUriToBlob(result.transformedImageUrl);
-      const transformedFileName = `${timestamp}-transformed-${originalFile.name}`;
-      const transformedStoragePath = `user-uploads/${user.uid}/${transformedFileName}`;
+      const transformedFileNameForStorage = `${timestamp}-transformed-${originalFile.name}`;
+      const transformedStoragePath = `user-uploads/${user.uid}/${transformedFileNameForStorage}`;
       const transformedStorageRef = storageRef(storage, transformedStoragePath);
       const transformedUploadTask = uploadBytesResumable(transformedStorageRef, transformedBlob);
 
@@ -183,6 +183,8 @@ export default function NanoProcessor() {
           userId: user.uid,
           originalImageUrl: originalImageUrl,
           transformedImageUrl: transformedImageUrl,
+          originalStoragePath: originalStoragePath,
+          transformedStoragePath: transformedStoragePath,
           originalFileName: originalFile.name,
           timestamp: serverTimestamp(),
       };
@@ -383,5 +385,3 @@ export default function NanoProcessor() {
     </div>
   );
 }
-
-    
