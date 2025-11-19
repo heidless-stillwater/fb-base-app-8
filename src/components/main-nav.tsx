@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, ListChecks, LogOut, Mail } from 'lucide-react';
+import { Home, ListChecks, LogOut, Mail, Wand2 } from 'lucide-react';
 
 import {
   Sidebar,
@@ -61,6 +61,14 @@ export default function MainNav() {
               <SidebarMenuButton isActive={pathname === '/contact'} tooltip="Contact">
                 <Mail />
                 <span>Contact</span>
+              </SidebarMenuButton>
+            </Link>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <Link href="/nano-and-display">
+              <SidebarMenuButton isActive={pathname === '/nano-and-display'} tooltip="Transform">
+                <Wand2 />
+                <span>Transform</span>
               </SidebarMenuButton>
             </Link>
           </SidebarMenuItem>
