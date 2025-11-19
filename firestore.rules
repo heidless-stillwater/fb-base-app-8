@@ -130,23 +130,19 @@ service cloud.firestore {
     }
     
     /**
-     * @description Controls access to nanoRecords. Only the authenticated user can manage their own records.
+     * @description Controls access to nanoRecords. Allows authenticated users to create records, but only read their own. Records are immutable.
      * @path /users/{userId}/nanoRecords/{recordId}
-     * @principle Enforces document ownership for nanoRecords and prevents unauthorized access. Validates userId on create and update.
+     * @principle Enforces ownership for reads based on a document field (`userId`) and immutability.
      */
     match /users/{userId}/nanoRecords/{recordId} {
-      function isOwner(userId) {
-        return request.auth != null && request.auth.uid == userId;
-      }
-
-      function isExistingOwner(userId) {
-        return isOwner(userId) && resource != null;
-      }
+      // Any authenticated user can create a record, as long as they set the userId correctly.
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
       
-      allow get, list: if isOwner(userId);
-      allow create: if isOwner(userId) && request.resource.data.userId == userId;
-      allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
-      allow delete: if isExistingOwner(userId);
+      // Users can only read (get, list) their own records.
+      allow read: if request.auth != null && request.auth.uid == resource.data.userId;
+      
+      // Updates and deletes are not allowed, making records immutable.
+      allow update, delete: if false;
     }
 
     /**
