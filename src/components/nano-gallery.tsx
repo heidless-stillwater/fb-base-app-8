@@ -20,10 +20,14 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { Loader2, ArrowRight, MoreVertical, Download } from 'lucide-react';
+import { Loader2, ArrowRight, MoreVertical, Download, LayoutGrid, List } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -39,11 +43,16 @@ interface NanoRecord {
   };
 }
 
+type ViewMode = 'detail' | 'large' | 'medium' | 'small';
+
+
 export default function NanoGallery() {
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
+  const [view, setView] = useState<ViewMode>('detail');
+
 
   const nanoRecordsQuery = useMemoFirebase(() => {
     if (!user) return null;
@@ -91,13 +100,40 @@ export default function NanoGallery() {
     }
   };
 
+  const viewClasses: Record<ViewMode, string> = {
+    detail: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
+    large: 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3',
+    medium: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4',
+    small: 'grid-cols-3 sm:grid-cols-4 md:grid-cols-6',
+  };
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Transformation History</CardTitle>
-        <CardDescription>
-          A gallery of your past image transformations. Click an item to select it.
-        </CardDescription>
+      <CardHeader className="flex-row items-start justify-between">
+        <div>
+            <CardTitle>Transformation History</CardTitle>
+            <CardDescription>
+            A gallery of your past image transformations. Click an item to select it.
+            </CardDescription>
+        </div>
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon">
+                    {view === 'detail' ? <List className="h-4 w-4" /> : <LayoutGrid className="h-4 w-4" />}
+                    <span className="sr-only">View Options</span>
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+                <DropdownMenuLabel>View Mode</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuRadioGroup value={view} onValueChange={(v) => setView(v as ViewMode)}>
+                    <DropdownMenuRadioItem value="detail">Details</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="large">Large Grid</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="medium">Medium Grid</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="small">Small Grid</DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+        </DropdownMenu>
       </CardHeader>
       <CardContent>
         {recordsLoading && (
@@ -116,7 +152,7 @@ export default function NanoGallery() {
           </div>
         )}
         {!recordsLoading && records && records.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className={cn("grid gap-4", viewClasses[view])}>
             {records.map((record) => (
               <div
                 key={record.id}
@@ -128,35 +164,48 @@ export default function NanoGallery() {
                 )}
                 onClick={() => setSelectedRecordId(record.id)}
               >
-                <div className="flex items-center justify-center gap-2 p-4 bg-muted/50">
-                  <div className="w-1/2 aspect-square relative">
-                    <Image
-                      src={record.originalImageUrl}
-                      alt="Original"
-                      fill
-                      sizes="(max-width: 640px) 40vw, (max-width: 1024px) 25vw, 15vw"
-                      className="object-cover rounded-md"
-                    />
-                    <div className="absolute bottom-1 right-1 bg-background/70 text-xs px-1.5 py-0.5 rounded">
-                      Original
+                {view === 'detail' ? (
+                     <div className="flex items-center justify-center gap-2 p-4 bg-muted/50">
+                        <div className="w-1/2 aspect-square relative">
+                            <Image
+                            src={record.originalImageUrl}
+                            alt="Original"
+                            fill
+                            sizes="(max-width: 640px) 40vw, (max-width: 1024px) 25vw, 15vw"
+                            className="object-cover rounded-md"
+                            />
+                            <div className="absolute bottom-1 right-1 bg-background/70 text-xs px-1.5 py-0.5 rounded">
+                            Original
+                            </div>
+                        </div>
+                        <ArrowRight className="h-6 w-6 text-muted-foreground" />
+                        <div className="w-1/2 aspect-square relative">
+                            <Image
+                            src={record.transformedImageUrl}
+                            alt="Transformed"
+                            fill
+                            sizes="(max-width: 640px) 40vw, (max-width: 1024px) 25vw, 15vw"
+                            className="object-cover rounded-md"
+                            />
+                            <div className="absolute bottom-1 right-1 bg-background/70 text-xs px-1.5 py-0.5 rounded">
+                            Transformed
+                            </div>
+                        </div>
                     </div>
-                  </div>
-                  <ArrowRight className="h-6 w-6 text-muted-foreground" />
-                  <div className="w-1/2 aspect-square relative">
-                    <Image
-                      src={record.transformedImageUrl}
-                      alt="Transformed"
-                      fill
-                      sizes="(max-width: 640px) 40vw, (max-width: 1024px) 25vw, 15vw"
-                      className="object-cover rounded-md"
-                    />
-                    <div className="absolute bottom-1 right-1 bg-background/70 text-xs px-1.5 py-0.5 rounded">
-                      Transformed
+                ) : (
+                    <div className="aspect-square relative">
+                        <Image
+                            src={record.transformedImageUrl}
+                            alt="Transformed"
+                            fill
+                            sizes="(max-width: 640px) 40vw, (max-width: 1024px) 25vw, 15vw"
+                            className="object-cover"
+                        />
                     </div>
-                  </div>
-                </div>
+                )}
+               
                 <div className="p-3 text-sm flex justify-between items-start">
-                  <div>
+                  <div className='flex-1 min-w-0'>
                     <p
                       className="font-medium truncate"
                       title={record.originalFileName}
