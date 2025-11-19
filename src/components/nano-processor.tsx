@@ -63,7 +63,8 @@ export default function NanoProcessor() {
   const [transformedImage, setTransformedImage] = useState<string | null>(null);
   const [style, setStyle] = useState<string>('van gogh style');
   const [prompt, setPrompt] = useState<string>('van gogh style');
-  const [testMode, setTestMode] = useState<boolean>(true);
+  const [testMode, setTestMode] = useState<boolean>(false);
+  const [freestyle, setFreestyle] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -74,8 +75,10 @@ export default function NanoProcessor() {
   const firestore = useFirestore();
 
   useEffect(() => {
-    setPrompt(style);
-  }, [style]);
+    if (!freestyle) {
+      setPrompt(style);
+    }
+  }, [style, freestyle]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -289,7 +292,7 @@ export default function NanoProcessor() {
 
           <div className="space-y-2">
             <Label htmlFor="style-select">Style</Label>
-            <Select value={style} onValueChange={setStyle} disabled={isLoading}>
+            <Select value={style} onValueChange={setStyle} disabled={isLoading || freestyle}>
               <SelectTrigger id="style-select">
                 <SelectValue placeholder="Select a style" />
               </SelectTrigger>
@@ -310,18 +313,34 @@ export default function NanoProcessor() {
               placeholder="e.g., make the sky purple, add a dragon"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              disabled={isLoading || !originalImage}
+              disabled={isLoading || !originalImage || !freestyle}
             />
           </div>
 
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="test-mode"
-              checked={testMode}
-              onCheckedChange={(checked) => setTestMode(checked as boolean)}
-              disabled={isLoading}
-            />
-            <Label htmlFor="test-mode">Test mode</Label>
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="test-mode"
+                checked={testMode}
+                onCheckedChange={(checked) => setTestMode(checked as boolean)}
+                disabled={isLoading}
+              />
+              <Label htmlFor="test-mode">Test mode</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="freestyle-mode"
+                checked={freestyle}
+                onCheckedChange={(checked) => {
+                  setFreestyle(checked as boolean);
+                  if (!checked) {
+                    setPrompt(style);
+                  }
+                }}
+                disabled={isLoading}
+              />
+              <Label htmlFor="freestyle-mode">Freestyle</Label>
+            </div>
           </div>
         </CardContent>
         <CardFooter className="flex flex-col items-start gap-4">
