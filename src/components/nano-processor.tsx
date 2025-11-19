@@ -188,7 +188,7 @@ export default function NanoProcessor() {
       };
       const nanoRecordsCollection = collection(firestore, `users/${user.uid}/nanoRecords`);
       
-      await addDoc(nanoRecordsCollection, nanoRecordData)
+      addDoc(nanoRecordsCollection, nanoRecordData)
         .catch(error => {
           console.error("Error creating nanoRecord: ", error);
            const permissionError = new FirestorePermissionError({
@@ -383,3 +383,5 @@ export default function NanoProcessor() {
     </div>
   );
 }
+
+    
