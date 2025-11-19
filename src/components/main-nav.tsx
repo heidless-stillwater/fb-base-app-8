@@ -16,6 +16,8 @@ import {
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { useAuth, useUser } from '@/firebase';
+import { ThemeToggle } from '@/components/theme-toggle';
+import { Separator } from './ui/separator';
 
 export default function MainNav() {
   const pathname = usePathname();
@@ -37,7 +39,7 @@ export default function MainNav() {
       <SidebarContent>
         <SidebarMenu>
           <SidebarMenuItem>
-            <Link href="/">
+            <Link href="/" legacyBehavior passHref>
               <SidebarMenuButton isActive={pathname === '/'} tooltip="Home">
                 <Home />
                 <span>Home</span>
@@ -45,7 +47,7 @@ export default function MainNav() {
             </Link>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <Link href="/todo">
+            <Link href="/todo" legacyBehavior passHref>
               <SidebarMenuButton isActive={pathname === '/todo'} tooltip="Todo">
                 <ListChecks />
                 <span>Todo</span>
@@ -53,7 +55,7 @@ export default function MainNav() {
             </Link>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <Link href="/contact">
+            <Link href="/contact" legacyBehavior passHref>
               <SidebarMenuButton isActive={pathname === '/contact'} tooltip="Contact">
                 <Mail />
                 <span>Contact</span>
@@ -63,10 +65,14 @@ export default function MainNav() {
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter>
-        <Button variant="ghost" onClick={() => auth.signOut()}>
-            <LogOut />
-            <span>Sign Out</span>
-        </Button>
+        <div className="flex items-center justify-between">
+            <ThemeToggle />
+            <Separator orientation='vertical' className="h-6" />
+            <Button variant="ghost" onClick={() => auth.signOut()}>
+                <LogOut />
+                <span>Sign Out</span>
+            </Button>
+        </div>
       </SidebarFooter>
     </Sidebar>
   );
