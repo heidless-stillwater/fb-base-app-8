@@ -354,18 +354,47 @@ export default function FileManager() {
     }
   };
 
-  const handleDownload = (node: FileNode) => {
-    if (node.downloadURL) {
-      window.open(node.downloadURL, '_blank');
-      toast({
-        title: "Download Started",
-        description: `Downloading "${node.name}".`,
-      });
-    } else {
+  const handleDownload = async (node: FileNode) => {
+    if (!node.downloadURL) {
       toast({
         variant: 'destructive',
-        title: "Download Failed",
+        title: 'Download Failed',
         description: `"${node.name}" has no download URL.`,
+      });
+      return;
+    }
+  
+    try {
+      toast({
+        title: 'Download Started',
+        description: `Downloading "${node.name}".`,
+      });
+  
+      // Fetch the file from the download URL
+      const response = await fetch(node.downloadURL);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch file: ${response.statusText}`);
+      }
+      const blob = await response.blob();
+  
+      // Create a temporary link to trigger the download
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = node.name;
+  
+      // Append to the document, click, and then remove
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+  
+      // Clean up the object URL
+      URL.revokeObjectURL(link.href);
+    } catch (error) {
+      console.error('Download error:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Download Failed',
+        description: `Could not download "${node.name}". See console for details.`,
       });
     }
   };
