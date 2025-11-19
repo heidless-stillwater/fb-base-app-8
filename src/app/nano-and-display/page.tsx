@@ -7,6 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import NanoProcessor from '@/components/nano-processor';
 
 export default function NanoAndDisplayPage() {
   return (
@@ -19,7 +20,7 @@ export default function NanoAndDisplayPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <p>Coming soon...</p>
+          <NanoProcessor />
         </CardContent>
       </Card>
     </div>
