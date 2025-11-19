@@ -119,7 +119,7 @@ type DialogState =
   | { type: "delete"; node: FileSystemNode }
   | null;
 
-type ViewMode = "small" | "medium" | "large" | "list";
+type ViewMode = "small" | "medium" | "large" | "extra-large" | "list";
 
 
 const GridItem = ({ node, onNodeClick, onDownload, onOpenDialog } : { node: FileSystemNode, onNodeClick: (node: FileSystemNode) => void, onDownload: (node: FileNode) => void, onOpenDialog: (state: DialogState) => void }) => {
@@ -550,6 +550,7 @@ export default function FileManager() {
       small: "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
       medium: "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5",
       large: "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4",
+      "extra-large": "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
       list: "flex flex-col gap-1",
   };
 
@@ -590,6 +591,7 @@ export default function FileManager() {
                         <DropdownMenuRadioItem value="small">Small Grid</DropdownMenuRadioItem>
                         <DropdownMenuRadioItem value="medium">Medium Grid</DropdownMenuRadioItem>
                         <DropdownMenuRadioItem value="large">Large Grid</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="extra-large">Extra Large Grid</DropdownMenuRadioItem>
                         <DropdownMenuRadioItem value="list">List</DropdownMenuRadioItem>
                     </DropdownMenuRadioGroup>
                 </DropdownMenuContent>
