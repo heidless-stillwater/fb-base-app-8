@@ -2,6 +2,11 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
+import {
+  ref as storageRef,
+  uploadBytesResumable,
+  getDownloadURL,
+} from 'firebase/storage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -31,7 +36,8 @@ import {
   X,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useUser, useFirestore, useStorage } from '@/firebase';
+import { useUser, useStorage } from '@/firebase';
+import { Progress } from '@/components/ui/progress';
 
 const styleOptions = [
   'gothic style',
@@ -54,10 +60,12 @@ export default function NanoProcessor() {
   const [prompt, setPrompt] = useState<string>('van gogh style');
   const [testMode, setTestMode] = useState<boolean>(true);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { user } = useUser();
+  const storage = useStorage();
 
   useEffect(() => {
     setPrompt(style);
@@ -83,6 +91,68 @@ export default function NanoProcessor() {
       reader.readAsDataURL(file);
     }
   };
+
+  const handleUpload = async () => {
+    if (!originalImage || !user) {
+        toast({
+            variant: 'destructive',
+            title: 'Missing Image or User',
+            description: 'Please select an image to upload and ensure you are logged in.',
+        });
+        return;
+    }
+
+    setIsLoading(true);
+    setUploadProgress(0);
+    setError(null);
+
+    const { file } = originalImage;
+    const timestamp = Date.now();
+    const filePath = `user-uploads/${user.uid}/${timestamp}-original-${file.name}`;
+    const fileStorageRef = storageRef(storage, filePath);
+    const uploadTask = uploadBytesResumable(fileStorageRef, file);
+
+    uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            setUploadProgress(progress);
+        },
+        (error) => {
+            console.error('Upload failed:', error);
+            setError('Failed to upload image. Please try again.');
+            toast({
+                variant: 'destructive',
+                title: 'Upload Failed',
+                description: error.message,
+            });
+            setIsLoading(false);
+            setUploadProgress(null);
+        },
+        async () => {
+            try {
+                const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                toast({
+                    title: 'Upload Successful',
+                    description: 'Image is ready for transformation.',
+                });
+                // In a real scenario, you might store this URL or pass it to the transform step
+                console.log('File available at', downloadURL);
+            } catch (e) {
+                setError('Failed to get download URL.');
+                toast({
+                    variant: 'destructive',
+                    title: 'Error',
+                    description: 'Could not get the image URL after upload.',
+                });
+            } finally {
+                setIsLoading(false);
+                setUploadProgress(null);
+            }
+        }
+    );
+  };
+
 
   const handleTransform = async () => {
     if (!originalImage || !prompt.trim() || !user) {
@@ -115,7 +185,7 @@ export default function NanoProcessor() {
     }
   };
 
-  const isUploadDisabled = !originalImage || !prompt.trim();
+  const isUploadDisabled = !originalImage || !prompt.trim() || isLoading;
 
 
   return (
@@ -141,6 +211,7 @@ export default function NanoProcessor() {
                 className="hidden"
                 ref={fileInputRef}
                 onChange={handleFileChange}
+                disabled={isLoading}
               />
               {originalImage ? (
                 <div className="relative">
@@ -159,6 +230,7 @@ export default function NanoProcessor() {
                       e.stopPropagation();
                       clearState();
                     }}
+                    disabled={isLoading}
                   >
                     <X className="h-4 w-4" />
                   </Button>
@@ -170,11 +242,12 @@ export default function NanoProcessor() {
                 </div>
               )}
             </div>
+             {uploadProgress !== null && <Progress value={uploadProgress} className="w-full mt-2" />}
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="style-select">Style</Label>
-            <Select value={style} onValueChange={setStyle}>
+            <Select value={style} onValueChange={setStyle} disabled={isLoading}>
               <SelectTrigger id="style-select">
                 <SelectValue placeholder="Select a style" />
               </SelectTrigger>
@@ -204,6 +277,7 @@ export default function NanoProcessor() {
               id="test-mode"
               checked={testMode}
               onCheckedChange={(checked) => setTestMode(checked as boolean)}
+              disabled={isLoading}
             />
             <Label htmlFor="test-mode">Test mode</Label>
           </div>
@@ -217,7 +291,8 @@ export default function NanoProcessor() {
             )}
             Transform Image
           </Button>
-          <Button disabled={isUploadDisabled}>
+          <Button onClick={handleUpload} disabled={isUploadDisabled}>
+            {isLoading && uploadProgress !== null ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             Upload Images
           </Button>
         </CardFooter>
@@ -232,7 +307,7 @@ export default function NanoProcessor() {
         </CardHeader>
         <CardContent>
           <div className="aspect-square border-2 border-dashed border-muted rounded-lg flex items-center justify-center bg-muted/50">
-            {isLoading && (
+            {isLoading && uploadProgress === null && (
               <Loader2 className="h-12 w-12 animate-spin text-primary" />
             )}
             {!isLoading && transformedImage && (
@@ -268,4 +343,5 @@ export default function NanoProcessor() {
       </Card>
     </div>
   );
-}
+
+    
