@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useMemo, useRef, ChangeEvent } from "react";
@@ -79,6 +80,7 @@ import { Progress } from "@/components/ui/progress";
 import { useUser, useFirestore, useStorage, useCollection, useMemoFirebase } from "@/firebase";
 import { cn } from "@/lib/utils";
 import { Grid, View } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 export interface FileSystemNode {
   id: string;
@@ -626,12 +628,19 @@ export default function FileManager() {
           </div>
           <div className="flex gap-2">
             <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button variant="outline">
-                        <CurrentViewIcon className="mr-2 h-4 w-4" />
-                        View
-                    </Button>
-                </DropdownMenuTrigger>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="icon">
+                                <CurrentViewIcon />
+                                <span className="sr-only">View Options</span>
+                            </Button>
+                        </DropdownMenuTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>View Options</p>
+                    </TooltipContent>
+                </Tooltip>
                 <DropdownMenuContent>
                     <DropdownMenuLabel>Display Options</DropdownMenuLabel>
                     <DropdownMenuSeparator />
@@ -643,12 +652,28 @@ export default function FileManager() {
                     </DropdownMenuRadioGroup>
                 </DropdownMenuContent>
             </DropdownMenu>
-            <Button onClick={() => handleOpenDialog({ type: 'create_folder' })}>
-              <FolderPlus className="mr-2 h-4 w-4" /> New Folder
-            </Button>
-            <Button onClick={handleUploadClick} className="bg-accent text-accent-foreground hover:bg-accent/90">
-              <Upload className="mr-2 h-4 w-4" /> Upload
-            </Button>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button variant="outline" size="icon" onClick={() => handleOpenDialog({ type: 'create_folder' })}>
+                      <FolderPlus />
+                      <span className="sr-only">New Folder</span>
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                    <p>New Folder</p>
+                </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button size="icon" onClick={handleUploadClick} className="bg-accent text-accent-foreground hover:bg-accent/90">
+                      <Upload />
+                       <span className="sr-only">Upload</span>
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                    <p>Upload</p>
+                </TooltipContent>
+            </Tooltip>
             <input
               type="file"
               ref={fileInputRef}
@@ -754,3 +779,4 @@ export default function FileManager() {
 }
 
     
+
