@@ -192,17 +192,22 @@ const GridItem = ({ node, onNodeClick, onDownload, onOpenDialog } : { node: File
 };
 
 const ListItem = ({ node, onNodeClick, onDownload, onOpenDialog }: { node: FileSystemNode; onNodeClick: (node: FileSystemNode) => void; onDownload: (node: FileNode) => void; onOpenDialog: (state: DialogState) => void; }) => {
+    const isImage = node.type === 'file' && (node as FileNode).fileType.startsWith('image/') && (node as FileNode).downloadURL;
     return (
       <div
         className="flex items-center w-full px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer group"
         onClick={() => onNodeClick(node)}
       >
         <div className="flex items-center gap-3 flex-1 min-w-0">
-          {node.type === "folder" ? (
-            <Folder className="h-5 w-5 text-muted-foreground" />
-          ) : (
-            <FileIcon className="h-5 w-5 text-muted-foreground" />
-          )}
+          <div className="w-8 h-8 flex-shrink-0 bg-muted rounded flex items-center justify-center">
+            {isImage ? (
+                <Image src={(node as FileNode).downloadURL!} alt={node.name} width={32} height={32} className="object-cover rounded w-full h-full"/>
+            ) : node.type === "folder" ? (
+                <Folder className="h-5 w-5 text-muted-foreground" />
+            ) : (
+                <FileIcon className="h-5 w-5 text-muted-foreground" />
+            )}
+          </div>
           <span className="truncate text-sm font-medium">{node.name}</span>
         </div>
         <div className="hidden sm:block text-sm text-muted-foreground w-48">
@@ -247,7 +252,7 @@ const ListItem = ({ node, onNodeClick, onDownload, onOpenDialog }: { node: FileS
 
 const ListHeader = () => (
     <div className="flex items-center w-full px-2 py-1.5 border-b sticky top-0 bg-background/95 backdrop-blur-sm z-10">
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 pl-11">
         <span className="text-sm font-semibold text-muted-foreground">Name</span>
       </div>
       <div className="hidden sm:block text-sm font-semibold text-muted-foreground w-48">
