@@ -1,0 +1,173 @@
+{
+  "entities": {
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user of the file management application.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the User entity."
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the user.",
+          "format": "email"
+        }
+      },
+      "required": [
+        "id",
+        "email"
+      ]
+    },
+    "FileMetadata": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "FileMetadata",
+      "type": "object",
+      "description": "Stores metadata for uploaded files.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the FileMetadata entity."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the User who uploaded the file. (Relationship: User 1:N FileMetadata)"
+        },
+        "fileName": {
+          "type": "string",
+          "description": "Name of the file."
+        },
+        "fileSize": {
+          "type": "number",
+          "description": "Size of the file in bytes."
+        },
+        "uploadDate": {
+          "type": "string",
+          "description": "Date and time when the file was uploaded.",
+          "format": "date-time"
+        },
+        "fileType": {
+          "type": "string",
+          "description": "MIME type of the file."
+        },
+        "folderId": {
+          "type": "string",
+          "description": "Reference to the Folder where the file is stored. (Relationship: Folder 1:N FileMetadata)"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "fileName",
+        "fileSize",
+        "uploadDate",
+        "fileType",
+        "folderId"
+      ]
+    },
+    "Folder": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Folder",
+      "type": "object",
+      "description": "Represents a folder in the file storage system.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Folder entity."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the User who owns the folder. (Relationship: User 1:N Folder)"
+        },
+        "folderName": {
+          "type": "string",
+          "description": "Name of the folder."
+        },
+        "parentFolderId": {
+          "type": "string",
+          "description": "Reference to the parent Folder. Null if it's the root folder. (Self-referential relationship: Folder 1:N Folder)"
+        },
+        "creationDate": {
+          "type": "string",
+          "description": "Date and time when the folder was created.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "folderName",
+        "creationDate"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user profiles. Path-based ownership ensures only the authenticated user can access their own profile.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user, obtained from Firebase Authentication."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/files/{fileId}",
+        "definition": {
+          "entityName": "FileMetadata",
+          "schema": {
+            "$ref": "#/backend/entities/FileMetadata"
+          },
+          "description": "Stores metadata for files uploaded by the user. Path-based ownership ensures only the authenticated user can manage their files.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user, obtained from Firebase Authentication."
+            },
+            {
+              "name": "fileId",
+              "description": "The unique identifier for the file metadata."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/folders/{folderId}",
+        "definition": {
+          "entityName": "Folder",
+          "schema": {
+            "$ref": "#/backend/entities/Folder"
+          },
+          "description": "Stores folder information. Path-based ownership ensures only the authenticated user can manage their folders.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user, obtained from Firebase Authentication."
+            },
+            {
+              "name": "folderId",
+              "description": "The unique identifier for the folder."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to ensure secure and scalable file management, following the principles of Authorization Independence, Clarity of Intent, DBAC, and QAPs. User data is stored in `/users/{userId}`.  File metadata and folders are organized under the user's document using hierarchical paths (`/users/{userId}/files/{fileId}` and `/users/{userId}/folders/{folderId}`) to represent ownership, with files stored as metadata only. This design prioritizes path-based ownership and avoids the need for complex security rules involving `get()` calls. File metadata is stored independently of the actual file content (which would be stored in Firebase Storage). This ensures that file metadata operations (listing, renaming, deleting) are fast and efficient. File and folder IDs will be generated client-side using a UUID generator. The structure supports secure list operations (QAPs) by ensuring that each collection has homogeneous security needs and uses path-based ownership, eliminating the need for filtering in rules. Folder structures are self-referential, but still isolated to the user's document space."
+  }
+}

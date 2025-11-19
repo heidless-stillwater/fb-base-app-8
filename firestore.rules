@@ -1,19 +1,109 @@
+/**
+ * @file Firebase Security Rules for File Management App
+ * @description This ruleset enforces a strict user-ownership model for all data. Each user has exclusive access to their profile, files, and folders.
+ *
+ * Data Structure:
+ * - /users/{userId}: Stores user profile information.
+ * - /users/{userId}/files/{fileId}: Stores metadata for files uploaded by the user.
+ * - /users/{userId}/folders/{folderId}: Stores folder information.
+ *
+ * Key Security Decisions:
+ * - Users can only access their own data.
+ * - No listing of all users is allowed.
+ * - Data schema is not strictly validated in this prototype to allow for rapid iteration. However, critical authorization fields (like userId) are validated on creation and updates.
+ *
+ * Denormalization for Authorization:
+ * - The 'userId' field is included within the FileMetadata and Folder documents. This is CRITICAL for security. Without it, it would be impossible to write rules that efficiently restrict access to the owner of the data.
+ *
+ * Structural Segregation:
+ * - User profiles, files, and folders are all stored under the /users/{userId} path. This ensures that each user's data is completely isolated from other users.
+ */
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // This rule allows anyone with your Firestore database reference to view, edit,
-    // and delete all data in your Firestore database. It is useful for getting
-    // started, but it is configured to expire after 30 days because it
-    // leaves your app open to attackers. At that time, all client
-    // requests to your Firestore database will be denied.
-    //
-    // Make sure to write security rules for your app before that time, or else
-    // all client requests to your Firestore database will be denied until you Update
-    // your rules
-    match /{document=**} {
-      allow read, write: if request.time < timestamp.date(2025, 12, 19);
+    /**
+     * @description Controls access to user profiles. Only the authenticated user can read or write their own profile.
+     * @path /users/{userId}
+     * @allow (create) - User with UID 'user_abc' can create their profile if request.auth.uid == 'user_abc' and request.resource.data.id == 'user_abc'.
+     * @allow (get, update, delete) - User with UID 'user_abc' can get, update, and delete their profile, no other user can.
+     * @deny (create) - User with UID 'user_def' cannot create a profile with ID 'user_abc'.
+     * @deny (list) - No one can list all users.
+     * @deny (update) - User with UID 'user_def' cannot update the profile of user 'user_abc'.
+     * @deny (delete) - User with UID 'user_def' cannot delete the profile of user 'user_abc'.
+     * @principle Enforces document ownership and prevents unauthorized profile access. Validates userId on create and update.
+     */
+    match /users/{userId} {
+      function isOwner(userId) {
+        return request.auth != null && request.auth.uid == userId;
+      }
+
+      function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+      }
+
+      allow get: if isOwner(userId);
+      allow list: if false;
+
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Controls access to file metadata for files uploaded by the user. Only the authenticated user can manage their own files.
+     * @path /users/{userId}/files/{fileId}
+     * @allow (create) - User with UID 'user_abc' can create file metadata under their user ID.
+     * @allow (get, update, delete) - User with UID 'user_abc' can get, update, and delete file metadata under their user ID.
+     * @deny (create) - User with UID 'user_def' cannot create file metadata under user 'user_abc'.
+     * @deny (list) - Only the owning user can list their files. Other users cannot.
+     * @deny (update) - User with UID 'user_def' cannot update file metadata under user 'user_abc'.
+     * @deny (delete) - User with UID 'user_def' cannot delete file metadata under user 'user_abc'.
+     * @principle Enforces document ownership for file metadata and prevents unauthorized access. Validates userId on create and update.
+     */
+    match /users/{userId}/files/{fileId} {
+      function isOwner(userId) {
+        return request.auth != null && request.auth.uid == userId;
+      }
+
+      function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+      }
+
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+
+      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Controls access to folders. Only the authenticated user can manage their own folders.
+     * @path /users/{userId}/folders/{folderId}
+     * @allow (create) - User with UID 'user_abc' can create a folder under their user ID.
+     * @allow (get, update, delete) - User with UID 'user_abc' can get, update, and delete folders under their user ID.
+     * @deny (create) - User with UID 'user_def' cannot create a folder under user 'user_abc'.
+     * @deny (list) - Only the owning user can list their folders. Other users cannot.
+     * @deny (update) - User with UID 'user_def' cannot update a folder under user 'user_abc'.
+     * @deny (delete) - User with UID 'user_def' cannot delete a folder under user 'user_abc'.
+     * @principle Enforces document ownership for folders and prevents unauthorized access. Validates userId on create and update.
+     */
+    match /users/{userId}/folders/{folderId} {
+      function isOwner(userId) {
+        return request.auth != null && request.auth.uid == userId;
+      }
+
+      function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+      }
+
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+
+      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+      allow delete: if isExistingOwner(userId);
     }
   }
 }
