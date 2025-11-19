@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useRef, ChangeEvent } from "react";
+import Image from "next/image";
 import {
   Folder,
   File as FileIcon,
@@ -13,6 +14,7 @@ import {
   ChevronRight,
   HomeIcon,
   Loader2,
+  ImageIcon,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -67,7 +69,8 @@ export interface FileSystemNode {
   path: string;
   size?: number;
   lastModified: Date;
-  content?: string; // Add content for download
+  content?: string;
+  thumbnailUrl?: string;
 }
 
 const initialFilesData: FileSystemNode[] = [
@@ -102,6 +105,7 @@ const initialFilesData: FileSystemNode[] = [
     size: 4194304,
     lastModified: new Date("2023-09-28T18:45:00"),
     content: "This is a dummy vacation photo JPG file.",
+    thumbnailUrl: "https://picsum.photos/seed/4/40/40"
   },
   {
     id: "5",
@@ -127,6 +131,16 @@ const initialFilesData: FileSystemNode[] = [
     size: 204800,
     lastModified: new Date("2023-10-10T10:00:00"),
     content: "This is a dummy final proposal DOCX file.",
+  },
+  {
+    id: '8',
+    name: 'sunset.png',
+    type: 'file',
+    path: '/Images',
+    size: 2097152,
+    lastModified: new Date('2023-10-15T19:20:00'),
+    content: 'This is a dummy sunset PNG file.',
+    thumbnailUrl: "https://picsum.photos/seed/8/40/40",
   },
 ];
 
@@ -291,7 +305,9 @@ export default function FileManager() {
       const newUploadingFile = { id: uploadId, name: file.name, progress: 0 };
       setUploadingFiles((prev) => [...prev, newUploadingFile]);
 
+      const isImage = file.type.startsWith("image/");
       const reader = new FileReader();
+
       reader.onload = (e) => {
         const content = e.target?.result as string;
 
@@ -313,6 +329,7 @@ export default function FileManager() {
             size: file.size,
             lastModified: new Date(),
             content: content,
+            thumbnailUrl: isImage ? content : undefined,
           };
           setNodes((prev) => [...prev, newNode]);
           setUploadingFiles((prev) => prev.filter((f) => f.id !== uploadId));
@@ -322,7 +339,12 @@ export default function FileManager() {
           });
         }, 2000);
       }
-      reader.readAsText(file);
+      
+      if (isImage) {
+        reader.readAsDataURL(file);
+      } else {
+        reader.readAsText(file);
+      }
     });
     
     if (fileInputRef.current) {
@@ -332,15 +354,27 @@ export default function FileManager() {
 
   const handleDownload = (node: FileSystemNode) => {
     if (node.type === 'file' && node.content) {
-      const blob = new Blob([node.content], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = node.name;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      const isDataUrl = node.content.startsWith('data:');
+      
+      if (isDataUrl) {
+        const a = document.createElement('a');
+        a.href = node.content;
+        a.download = node.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } else {
+        const blob = new Blob([node.content], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = node.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+
       toast({
         title: "Download Started",
         description: `Downloading "${node.name}".`,
@@ -432,6 +466,7 @@ export default function FileManager() {
               onChange={handleFileChange}
               className="hidden"
               multiple
+              accept="image/*,text/*,.pdf,.doc,.docx,.xls,.xlsx"
             />
           </div>
         </CardHeader>
@@ -469,6 +504,7 @@ export default function FileManager() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[50px]"></TableHead>
+                  <TableHead className="w-[80px]">Thumbnail</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead className="hidden md:table-cell w-[150px]">
                     Size
@@ -492,6 +528,15 @@ export default function FileManager() {
                       ) : (
                         <FileIcon />
                       )}
+                    </TableCell>
+                    <TableCell>
+                      {node.type === 'file' && node.thumbnailUrl ? (
+                        <Image src={node.thumbnailUrl} alt={node.name} width={40} height={40} className="rounded-md object-cover" />
+                      ) : node.type === 'file' ? (
+                        <div className="w-10 h-10 flex items-center justify-center bg-muted rounded-md">
+                          <ImageIcon className="w-5 h-5 text-muted-foreground" />
+                        </div>
+                      ) : <div className="w-10 h-10"></div>}
                     </TableCell>
                     <TableCell className="font-medium">{node.name}</TableCell>
                     <TableCell className="hidden md:table-cell text-muted-foreground">
@@ -548,7 +593,7 @@ export default function FileManager() {
                     <TableCell className="text-muted-foreground">
                       <Loader2 className="h-5 w-5 animate-spin" />
                     </TableCell>
-                    <TableCell colSpan={4}>
+                    <TableCell colSpan={5}>
                       <div className="flex items-center gap-4">
                         <span className="font-medium flex-1 truncate">{file.name}</span>
                         <Progress value={file.progress} className="w-32" />
@@ -559,7 +604,7 @@ export default function FileManager() {
                 ))}
                  {currentNodes.length === 0 && uploadingFiles.length === 0 && (
                     <TableRow>
-                        <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                        <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                             This folder is empty.
                         </TableCell>
                     </TableRow>
