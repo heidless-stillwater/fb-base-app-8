@@ -67,6 +67,7 @@ export interface FileSystemNode {
   path: string;
   size?: number;
   lastModified: Date;
+  content?: string; // Add content for download
 }
 
 const initialFilesData: FileSystemNode[] = [
@@ -91,6 +92,7 @@ const initialFilesData: FileSystemNode[] = [
     path: "/",
     size: 1572864,
     lastModified: new Date("2023-10-11T11:20:00"),
+    content: "This is a dummy project brief PDF file.",
   },
   {
     id: "4",
@@ -99,6 +101,7 @@ const initialFilesData: FileSystemNode[] = [
     path: "/Images",
     size: 4194304,
     lastModified: new Date("2023-09-28T18:45:00"),
+    content: "This is a dummy vacation photo JPG file.",
   },
   {
     id: "5",
@@ -107,6 +110,7 @@ const initialFilesData: FileSystemNode[] = [
     path: "/Documents",
     size: 512000,
     lastModified: new Date("2023-10-09T16:05:00"),
+    content: "This is a dummy budget XLSX file.",
   },
   {
     id: "6",
@@ -122,6 +126,7 @@ const initialFilesData: FileSystemNode[] = [
     path: "/Documents/Client Proposal",
     size: 204800,
     lastModified: new Date("2023-10-10T10:00:00"),
+    content: "This is a dummy final proposal DOCX file.",
   },
 ];
 
@@ -286,31 +291,38 @@ export default function FileManager() {
       const newUploadingFile = { id: uploadId, name: file.name, progress: 0 };
       setUploadingFiles((prev) => [...prev, newUploadingFile]);
 
-      const interval = setInterval(() => {
-        setUploadingFiles((prev) =>
-          prev.map((f) =>
-            f.id === uploadId ? { ...f, progress: f.progress + 10 } : f
-          )
-        );
-      }, 200);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const content = e.target?.result as string;
 
-      setTimeout(() => {
-        clearInterval(interval);
-        const newNode: FileSystemNode = {
-          id: new Date().toISOString() + Math.random(),
-          name: file.name,
-          type: "file",
-          path: currentPathString,
-          size: file.size,
-          lastModified: new Date(),
-        };
-        setNodes((prev) => [...prev, newNode]);
-        setUploadingFiles((prev) => prev.filter((f) => f.id !== uploadId));
-        toast({
-          title: "Upload Complete",
-          description: `File "${file.name}" has been uploaded.`,
-        });
-      }, 2000);
+        const interval = setInterval(() => {
+          setUploadingFiles((prev) =>
+            prev.map((f) =>
+              f.id === uploadId ? { ...f, progress: f.progress + 10 } : f
+            )
+          );
+        }, 200);
+  
+        setTimeout(() => {
+          clearInterval(interval);
+          const newNode: FileSystemNode = {
+            id: new Date().toISOString() + Math.random(),
+            name: file.name,
+            type: "file",
+            path: currentPathString,
+            size: file.size,
+            lastModified: new Date(),
+            content: content,
+          };
+          setNodes((prev) => [...prev, newNode]);
+          setUploadingFiles((prev) => prev.filter((f) => f.id !== uploadId));
+          toast({
+            title: "Upload Complete",
+            description: `File "${file.name}" has been uploaded.`,
+          });
+        }, 2000);
+      }
+      reader.readAsText(file);
     });
     
     if (fileInputRef.current) {
@@ -319,11 +331,27 @@ export default function FileManager() {
   };
 
   const handleDownload = (node: FileSystemNode) => {
-    toast({
-      title: "Downloading...",
-      description: `Preparing to download "${node.name}".`,
-    });
-    // In a real app, this would trigger a file download.
+    if (node.type === 'file' && node.content) {
+      const blob = new Blob([node.content], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = node.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({
+        title: "Download Started",
+        description: `Downloading "${node.name}".`,
+      });
+    } else {
+      toast({
+        variant: 'destructive',
+        title: "Download Failed",
+        description: `"${node.name}" has no content to download.`,
+      });
+    }
   };
 
   const dialogContent = useMemo(() => {
