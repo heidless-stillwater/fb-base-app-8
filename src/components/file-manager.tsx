@@ -426,13 +426,14 @@ export default function FileManager() {
         </DialogFooter>
       </DialogContent>
     );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dialogState, inputValue]);
 
   const isLoading = foldersLoading || filesLoading;
 
   return (
     <>
-      <Card className="shadow-lg">
+      <Card className="shadow-lg h-full">
         <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <CardTitle className="text-2xl">Cloud Storage</CardTitle>
