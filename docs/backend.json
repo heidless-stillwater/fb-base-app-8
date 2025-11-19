@@ -101,6 +101,42 @@
         "folderName",
         "creationDate"
       ]
+    },
+    "Todo": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Todo",
+      "type": "object",
+      "description": "Represents a single to-do item for a user.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Todo entity."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the User who owns the to-do item."
+        },
+        "text": {
+          "type": "string",
+          "description": "The content of the to-do item."
+        },
+        "completed": {
+          "type": "boolean",
+          "description": "Whether the to-do item is completed or not."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Date and time when the to-do item was created.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "text",
+        "completed",
+        "createdAt"
+      ]
     }
   },
   "auth": {
@@ -165,8 +201,28 @@
             }
           ]
         }
+      },
+      {
+        "path": "/users/{userId}/todos/{todoId}",
+        "definition": {
+          "entityName": "Todo",
+          "schema": {
+            "$ref": "#/backend/entities/Todo"
+          },
+          "description": "Stores to-do items for each user. Path-based ownership ensures only the authenticated user can manage their to-do items.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user, obtained from Firebase Authentication."
+            },
+            {
+              "name": "todoId",
+              "description": "The unique identifier for the to-do item."
+            }
+          ]
+        }
       }
     ],
-    "reasoning": "The Firestore structure is designed to ensure secure and scalable file management, following the principles of Authorization Independence, Clarity of Intent, DBAC, and QAPs. User data is stored in `/users/{userId}`.  File metadata and folders are organized under the user's document using hierarchical paths (`/users/{userId}/files/{fileId}` and `/users/{userId}/folders/{folderId}`) to represent ownership, with files stored as metadata only. This design prioritizes path-based ownership and avoids the need for complex security rules involving `get()` calls. File metadata is stored independently of the actual file content (which would be stored in Firebase Storage). This ensures that file metadata operations (listing, renaming, deleting) are fast and efficient. File and folder IDs will be generated client-side using a UUID generator. The structure supports secure list operations (QAPs) by ensuring that each collection has homogeneous security needs and uses path-based ownership, eliminating the need for filtering in rules. Folder structures are self-referential, but still isolated to the user's document space."
+    "reasoning": "The Firestore structure is designed to ensure secure and scalable file management, following the principles of Authorization Independence, Clarity of Intent, DBAC, and QAPs. User data is stored in `/users/{userId}`.  File metadata and folders are organized under the user's document using hierarchical paths (`/users/{userId}/files/{fileId}` and `/users/{userId}/folders/{folderId}`) to represent ownership, with files stored as metadata only. This design prioritizes path-based ownership and avoids the need for complex security rules involving `get()` calls. File metadata is stored independently of the actual file content (which would be stored in Firebase Storage). This ensures that file metadata operations (listing, renaming, deleting) are fast and efficient. File and folder IDs will be generated client-side using a UUID generator. The structure supports secure list operations (QAPs) by ensuring that each collection has homogeneous security needs and uses path-based ownership, eliminating the need for filtering in rules. Folder structures are self-referential, but still isolated to the user's document space. The new Todo collection follows the same pattern of user ownership."
   }
 }

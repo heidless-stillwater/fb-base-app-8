@@ -1,67 +1,131 @@
 'use client';
 
 import { useState } from 'react';
+import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, addDoc, deleteDoc, doc, serverTimestamp, query } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+
+interface Todo {
+    id: string;
+    text: string;
+    completed: boolean;
+    createdAt: any;
+}
 
 export default function TodoProcessor() {
-  const [todoText, setTodoText] = useState('');
-  const [processedTodos, setProcessedTodos] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+    const { user } = useUser();
+    const firestore = useFirestore();
+    const { toast } = useToast();
 
-  const handleProcessTodos = async () => {
-    setIsLoading(true);
-    // Simulate processing time
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    const todos = todoText.split('\n').filter((todo) => todo.trim() !== '');
-    setProcessedTodos(todos);
-    setIsLoading(false);
-  };
+    const [newTodo, setNewTodo] = useState('');
 
-  return (
-    <div className="grid gap-6 md:grid-cols-2">
-      <Card>
-        <CardHeader>
-          <CardTitle>Your Todo Input</CardTitle>
-          <CardDescription>Enter your tasks below, one per line. Then click the process button.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Textarea
-            placeholder="e.g.&#10;Buy milk&#10;Walk the dog&#10;Learn Next.js"
-            value={todoText}
-            onChange={(e) => setTodoText(e.target.value)}
-            rows={10}
-            className="w-full"
-          />
-          <Button onClick={handleProcessTodos} disabled={isLoading || !todoText.trim()} className="w-full">
-            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            <span>{isLoading ? 'Processing...' : 'Process Todos'}</span>
-          </Button>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Processed Todos</CardTitle>
-          <CardDescription>This is where your processed todo list will appear.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {processedTodos.length > 0 ? (
-            <ul className="space-y-2">
-              {processedTodos.map((todo, index) => (
-                <li key={index} className="flex items-center rounded-md bg-muted p-3">
-                  {todo}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="flex items-center justify-center h-48 rounded-md border border-dashed text-sm text-muted-foreground">
-              <p>Your processed todos will show up here.</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
+    const todosQuery = useMemoFirebase(() => {
+        if (!user) return null;
+        return query(collection(firestore, `users/${user.uid}/todos`));
+    }, [firestore, user]);
+
+    const { data: todos, isLoading: todosLoading } = useCollection<Todo>(todosQuery);
+
+    const handleAddTodo = async () => {
+        if (!newTodo.trim() || !user) return;
+
+        try {
+            await addDoc(collection(firestore, `users/${user.uid}/todos`), {
+                text: newTodo,
+                completed: false,
+                createdAt: serverTimestamp(),
+                userId: user.uid,
+            });
+            setNewTodo('');
+            toast({
+                title: 'Success',
+                description: 'Todo added.',
+            });
+        } catch (error) {
+            console.error('Error adding todo: ', error);
+            toast({
+                variant: 'destructive',
+                title: 'Error',
+                description: 'Could not add todo.',
+            });
+        }
+    };
+
+    const handleDeleteTodo = async (todoId: string) => {
+        if (!user) return;
+        try {
+            await deleteDoc(doc(firestore, `users/${user.uid}/todos`, todoId));
+            toast({
+                title: 'Success',
+                description: 'Todo deleted.',
+            });
+        } catch (error) {
+            console.error('Error deleting todo: ', error);
+            toast({
+                variant: 'destructive',
+                title: 'Error',
+                description: 'Could not delete todo.',
+            });
+        }
+    };
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Your Todos</CardTitle>
+                <CardDescription>Add, manage, and complete your tasks.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="flex w-full max-w-sm items-center space-x-2 mb-4">
+                    <Input
+                        type="text"
+                        placeholder="e.g. Learn Firebase"
+                        value={newTodo}
+                        onChange={(e) => setNewTodo(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                handleAddTodo();
+                            }
+                        }}
+                    />
+                    <Button onClick={handleAddTodo} disabled={!newTodo.trim()}>
+                        <Plus className="mr-2 h-4 w-4" /> Add
+                    </Button>
+                </div>
+
+                {todosLoading && (
+                    <div className="flex items-center justify-center h-48">
+                        <Loader2 className="h-8 w-8 animate-spin" />
+                    </div>
+                )}
+
+                {!todosLoading && todos && todos.length > 0 ? (
+                    <ul className="space-y-2">
+                        {todos.sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0)).map((todo) => (
+                            <li key={todo.id} className="flex items-center justify-between rounded-md bg-muted p-3">
+                                <span>{todo.text}</span>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleDeleteTodo(todo.id)}
+                                >
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                            </li>
+                        ))}
+                    </ul>
+                ) : (
+                    !todosLoading && (
+                        <div className="flex items-center justify-center h-48 rounded-md border border-dashed text-sm text-muted-foreground">
+                            <p>No todos yet. Add one to get started!</p>
+                        </div>
+                    )
+                )}
+            </CardContent>
+        </Card>
+    );
 }

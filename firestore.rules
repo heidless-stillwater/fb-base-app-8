@@ -6,6 +6,7 @@
  * - /users/{userId}: Stores user profile information.
  * - /users/{userId}/files/{fileId}: Stores metadata for files uploaded by the user.
  * - /users/{userId}/folders/{folderId}: Stores folder information.
+ * - /users/{userId}/todos/{todoId}: Stores todo items for the user.
  *
  * Key Security Decisions:
  * - Users can only access their own data.
@@ -101,6 +102,26 @@ service cloud.firestore {
       allow get: if isOwner(userId);
       allow list: if isOwner(userId);
 
+      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+      allow delete: if isExistingOwner(userId);
+    }
+    
+    /**
+     * @description Controls access to todos. Only the authenticated user can manage their own todos.
+     * @path /users/{userId}/todos/{todoId}
+     * @principle Enforces document ownership for todos and prevents unauthorized access. Validates userId on create and update.
+     */
+    match /users/{userId}/todos/{todoId} {
+      function isOwner(userId) {
+        return request.auth != null && request.auth.uid == userId;
+      }
+
+      function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+      }
+      
+      allow get, list: if isOwner(userId);
       allow create: if isOwner(userId) && request.resource.data.userId == userId;
       allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
       allow delete: if isExistingOwner(userId);
