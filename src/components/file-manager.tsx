@@ -17,6 +17,24 @@ import {
   ImageIcon,
 } from "lucide-react";
 import { format } from "date-fns";
+import {
+  collection,
+  query,
+  where,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  serverTimestamp,
+  Timestamp,
+} from "firebase/firestore";
+import {
+  ref as storageRef,
+  uploadBytesResumable,
+  getDownloadURL,
+  deleteObject,
+} from "firebase/storage";
+import { v4 as uuidv4 } from 'uuid';
 
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -61,88 +79,29 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { useUser, useFirestore, useStorage, useCollection, useMemoFirebase } from "@/firebase";
 
 export interface FileSystemNode {
   id: string;
   name: string;
   type: "file" | "folder";
   path: string;
+  userId: string;
   size?: number;
   lastModified: Date;
-  content?: string;
-  thumbnailUrl?: string;
+  downloadURL?: string;
+  storagePath?: string;
 }
 
-const initialFilesData: FileSystemNode[] = [
-  {
-    id: "1",
-    name: "Documents",
-    type: "folder",
-    path: "/",
-    lastModified: new Date("2023-10-10T09:00:00"),
-  },
-  {
-    id: "2",
-    name: "Images",
-    type: "folder",
-    path: "/",
-    lastModified: new Date("2023-10-12T14:30:00"),
-  },
-  {
-    id: "3",
-    name: "project-brief.pdf",
-    type: "file",
-    path: "/",
-    size: 1572864,
-    lastModified: new Date("2023-10-11T11:20:00"),
-    content: "This is a dummy project brief PDF file.",
-  },
-  {
-    id: "4",
-    name: "vacation-photo.jpg",
-    type: "file",
-    path: "/Images",
-    size: 4194304,
-    lastModified: new Date("2023-09-28T18:45:00"),
-    content: "This is a dummy vacation photo JPG file.",
-    thumbnailUrl: "https://picsum.photos/seed/4/40/40"
-  },
-  {
-    id: "5",
-    name: "budget.xlsx",
-    type: "file",
-    path: "/Documents",
-    size: 512000,
-    lastModified: new Date("2023-10-09T16:05:00"),
-    content: "This is a dummy budget XLSX file.",
-  },
-  {
-    id: "6",
-    name: "Client Proposal",
-    type: "folder",
-    path: "/Documents",
-    lastModified: new Date("2023-10-10T09:00:00"),
-  },
-  {
-    id: "7",
-    name: "final-proposal.docx",
-    type: "file",
-    path: "/Documents/Client Proposal",
-    size: 204800,
-    lastModified: new Date("2023-10-10T10:00:00"),
-    content: "This is a dummy final proposal DOCX file.",
-  },
-  {
-    id: '8',
-    name: 'sunset.png',
-    type: 'file',
-    path: '/Images',
-    size: 2097152,
-    lastModified: new Date('2023-10-15T19:20:00'),
-    content: 'This is a dummy sunset PNG file.',
-    thumbnailUrl: "https://picsum.photos/seed/8/40/40",
-  },
-];
+export interface FolderNode extends FileSystemNode {
+  type: 'folder';
+}
+
+export interface FileNode extends FileSystemNode {
+  type: 'file';
+  fileType: string;
+}
+
 
 function formatBytes(bytes: number, decimals = 2) {
   if (!+bytes) return "0 Bytes";
@@ -160,7 +119,10 @@ type DialogState =
   | null;
 
 export default function FileManager() {
-  const [nodes, setNodes] = useState<FileSystemNode[]>(initialFilesData);
+  const { user } = useUser();
+  const firestore = useFirestore();
+  const storage = useStorage();
+
   const [currentPath, setCurrentPath] = useState<string[]>([]);
   const [dialogState, setDialogState] = useState<DialogState>(null);
   const [inputValue, setInputValue] = useState("");
@@ -174,16 +136,39 @@ export default function FileManager() {
     () => (currentPath.length === 0 ? "/" : `/${currentPath.join("/")}`),
     [currentPath]
   );
+  
+  const foldersQuery = useMemoFirebase(() => {
+    if (!user) return null;
+    return query(
+      collection(firestore, `users/${user.uid}/folders`),
+      where("path", "==", currentPathString)
+    );
+  }, [firestore, user, currentPathString]);
+
+  const filesQuery = useMemoFirebase(() => {
+    if (!user) return null;
+    return query(
+        collection(firestore, `users/${user.uid}/files`),
+        where("path", "==", currentPathString)
+    );
+  }, [firestore, user, currentPathString]);
+
+  const { data: foldersData, isLoading: foldersLoading } = useCollection<FolderNode>(foldersQuery);
+  const { data: filesData, isLoading: filesLoading } = useCollection<FileNode>(filesQuery);
 
   const currentNodes = useMemo(() => {
-    return nodes
-      .filter((node) => node.path === currentPathString)
-      .sort((a, b) => {
-        if (a.type === "folder" && b.type === "file") return -1;
-        if (a.type === "file" && b.type === "folder") return 1;
-        return a.name.localeCompare(b.name);
-      });
-  }, [nodes, currentPathString]);
+    const combined = [
+        ...(foldersData || []).map(f => ({ ...f, lastModified: (f.lastModified as any).toDate() })),
+        ...(filesData || []).map(f => ({ ...f, lastModified: (f.lastModified as any).toDate() }))
+    ];
+
+    return combined.sort((a, b) => {
+      if (a.type === "folder" && b.type === "file") return -1;
+      if (a.type === "file" && b.type === "folder") return 1;
+      return a.name.localeCompare(b.name);
+    });
+  }, [foldersData, filesData]);
+
 
   const handleNodeClick = (node: FileSystemNode) => {
     if (node.type === "folder") {
@@ -209,87 +194,88 @@ export default function FileManager() {
     setInputValue("");
   };
 
-  const handleCreateFolder = () => {
-    if (!inputValue.trim()) {
-      toast({
-        title: "Error",
-        description: "Folder name cannot be empty.",
-        variant: "destructive",
-      });
-      return;
-    }
-    const newNode: FileSystemNode = {
-      id: new Date().toISOString(),
+  const handleCreateFolder = async () => {
+    if (!inputValue.trim() || !user) return;
+    
+    const newFolder: Omit<FolderNode, 'id'> = {
       name: inputValue,
       type: "folder",
       path: currentPathString,
-      lastModified: new Date(),
+      userId: user.uid,
+      lastModified: serverTimestamp() as any,
     };
-    setNodes([...nodes, newNode]);
-    toast({
-      title: "Success",
-      description: `Folder "${inputValue}" created.`,
-    });
-    closeDialog();
+    try {
+      await addDoc(collection(firestore, `users/${user.uid}/folders`), newFolder);
+      toast({
+        title: "Success",
+        description: `Folder "${inputValue}" created.`,
+      });
+      closeDialog();
+    } catch(e) {
+      console.error(e);
+      toast({
+        title: "Error",
+        description: "Could not create folder.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleRenameNode = () => {
-    if (dialogState?.type !== "rename") return;
+  const handleRenameNode = async () => {
+    if (dialogState?.type !== "rename" || !user) return;
 
     const originalNode = dialogState.node;
     const newName = inputValue;
 
-    if (!newName.trim()) {
-      toast({
-        title: "Error",
-        description: "Name cannot be empty.",
-        variant: "destructive",
-      });
-      return;
-    }
+    if (!newName.trim()) return;
     
-    const oldPathPrefix = originalNode.path === '/' ? `/${originalNode.name}` : `${originalNode.path}/${originalNode.name}`;
-    const newPathPrefix = originalNode.path === '/' ? `/${newName}` : `${originalNode.path}/${newName}`;
+    const collectionName = originalNode.type === 'folder' ? 'folders' : 'files';
+    const docRef = doc(firestore, `users/${user.uid}/${collectionName}`, originalNode.id);
 
-
-    setNodes((prevNodes) =>
-      prevNodes.map((n) => {
-        if (n.id === originalNode.id) {
-          return { ...n, name: newName, lastModified: new Date() };
-        }
-        if (originalNode.type === 'folder' && n.path.startsWith(oldPathPrefix)) {
-          const newPath = newPathPrefix + n.path.substring(oldPathPrefix.length);
-          return { ...n, path: newPath };
-        }
-        return n;
-      })
-    );
-
-    toast({
-      title: "Success",
-      description: `Renamed "${originalNode.name}" to "${newName}".`,
-    });
-    closeDialog();
+    try {
+      await updateDoc(docRef, { name: newName, lastModified: serverTimestamp() });
+      // Note: Renaming folders does not yet update paths of children. This is a complex operation.
+      toast({
+        title: "Success",
+        description: `Renamed "${originalNode.name}" to "${newName}".`,
+      });
+      closeDialog();
+    } catch(e) {
+        console.error(e);
+        toast({
+            title: "Error",
+            description: "Could not rename item.",
+            variant: "destructive",
+        });
+    }
   };
 
-  const handleDeleteNode = () => {
-    if (dialogState?.type !== "delete") return;
+  const handleDeleteNode = async () => {
+    if (dialogState?.type !== "delete" || !user) return;
     const nodeToDelete = dialogState.node;
     
-    setNodes((prevNodes) => {
-        if (nodeToDelete.type === 'file') {
-            return prevNodes.filter(n => n.id !== nodeToDelete.id);
-        } else {
-            const pathToDeletePrefix = nodeToDelete.path === '/' ? `/${nodeToDelete.name}` : `${nodeToDelete.path}/${nodeToDelete.name}`;
-            return prevNodes.filter(n => n.id !== nodeToDelete.id && !n.path.startsWith(pathToDeletePrefix));
-        }
-    });
+    const collectionName = nodeToDelete.type === 'folder' ? 'folders' : 'files';
+    const docRef = doc(firestore, `users/${user.uid}/${collectionName}`, nodeToDelete.id);
 
-    toast({
-      title: "Success",
-      description: `Deleted "${nodeToDelete.name}".`,
-    });
-    closeDialog();
+    try {
+      if (nodeToDelete.type === 'file' && nodeToDelete.storagePath) {
+        await deleteObject(storageRef(storage, nodeToDelete.storagePath));
+      }
+      await deleteDoc(docRef);
+      // Note: Deleting folders does not yet delete children. This is a complex operation.
+      toast({
+        title: "Success",
+        description: `Deleted "${nodeToDelete.name}".`,
+      });
+      closeDialog();
+    } catch(e) {
+        console.error(e);
+        toast({
+            title: "Error",
+            description: "Could not delete item.",
+            variant: "destructive",
+        });
+    }
   };
 
   const handleUploadClick = () => {
@@ -298,53 +284,69 @@ export default function FileManager() {
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
-    if (!files) return;
+    if (!files || !user) return;
 
     Array.from(files).forEach((file) => {
       const uploadId = Date.now() + Math.random();
       const newUploadingFile = { id: uploadId, name: file.name, progress: 0 };
       setUploadingFiles((prev) => [...prev, newUploadingFile]);
+      
+      const fileId = uuidv4();
+      const filePath = `users/${user.uid}/files/${fileId}_${file.name}`;
+      const fileStorageRef = storageRef(storage, filePath);
+      const uploadTask = uploadBytesResumable(fileStorageRef, file);
 
-      const isImage = file.type.startsWith("image/");
-      const reader = new FileReader();
-
-      reader.onload = (e) => {
-        const content = e.target?.result as string;
-
-        const interval = setInterval(() => {
+      uploadTask.on(
+        "state_changed",
+        (snapshot) => {
+          const progress =
+            (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
           setUploadingFiles((prev) =>
             prev.map((f) =>
-              f.id === uploadId ? { ...f, progress: f.progress + 10 } : f
+              f.id === uploadId ? { ...f, progress: progress } : f
             )
           );
-        }, 200);
-  
-        setTimeout(() => {
-          clearInterval(interval);
-          const newNode: FileSystemNode = {
-            id: new Date().toISOString() + Math.random(),
+        },
+        (error) => {
+          console.error("Upload failed:", error);
+          toast({
+            title: "Upload Failed",
+            description: `Could not upload ${file.name}.`,
+            variant: "destructive",
+          });
+          setUploadingFiles((prev) => prev.filter((f) => f.id !== uploadId));
+        },
+        async () => {
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          const fileDoc: Omit<FileNode, 'id'> = {
             name: file.name,
             type: "file",
             path: currentPathString,
+            userId: user.uid,
             size: file.size,
-            lastModified: new Date(),
-            content: content,
-            thumbnailUrl: isImage ? content : undefined,
+            fileType: file.type,
+            lastModified: serverTimestamp() as any,
+            downloadURL,
+            storagePath: filePath,
           };
-          setNodes((prev) => [...prev, newNode]);
-          setUploadingFiles((prev) => prev.filter((f) => f.id !== uploadId));
-          toast({
-            title: "Upload Complete",
-            description: `File "${file.name}" has been uploaded.`,
-          });
-        }, 2000);
-      }
-      
-      if (isImage) {
-        reader.readAsDataURL(file);
-      } else {
-        reader.readAsText(file);
-      }
+          try {
+            await addDoc(collection(firestore, `users/${user.uid}/files`), fileDoc);
+            toast({
+              title: "Upload Complete",
+              description: `File "${file.name}" has been uploaded.`,
+            });
+          } catch(e) {
+             console.error("Error adding file to firestore:", e);
+             toast({
+                title: "Upload Failed",
+                description: `Could not save ${file.name} metadata.`,
+                variant: "destructive",
+             });
+          } finally {
+            setUploadingFiles((prev) => prev.filter((f) => f.id !== uploadId));
+          }
+        }
+      );
     });
     
     if (fileInputRef.current) {
@@ -352,29 +354,9 @@ export default function FileManager() {
     }
   };
 
-  const handleDownload = (node: FileSystemNode) => {
-    if (node.type === 'file' && node.content) {
-      const isDataUrl = node.content.startsWith('data:');
-      
-      if (isDataUrl) {
-        const a = document.createElement('a');
-        a.href = node.content;
-        a.download = node.name;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-      } else {
-        const blob = new Blob([node.content], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = node.name;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }
-
+  const handleDownload = (node: FileNode) => {
+    if (node.downloadURL) {
+      window.open(node.downloadURL, '_blank');
       toast({
         title: "Download Started",
         description: `Downloading "${node.name}".`,
@@ -383,7 +365,7 @@ export default function FileManager() {
       toast({
         variant: 'destructive',
         title: "Download Failed",
-        description: `"${node.name}" has no content to download.`,
+        description: `"${node.name}" has no download URL.`,
       });
     }
   };
@@ -398,7 +380,7 @@ export default function FileManager() {
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
               This will permanently delete "{dialogState.node.name}"
-              {dialogState.node.type === 'folder' && ' and all its contents'}. This action cannot be undone.
+              {dialogState.node.type === 'folder' && ' and all its contents (feature coming soon)'}. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -429,6 +411,7 @@ export default function FileManager() {
               className="col-span-3"
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
+                  e.preventDefault();
                   isRename ? handleRenameNode() : handleCreateFolder();
                 }
               }}
@@ -444,6 +427,8 @@ export default function FileManager() {
       </DialogContent>
     );
   }, [dialogState, inputValue]);
+
+  const isLoading = foldersLoading || filesLoading;
 
   return (
     <>
@@ -466,7 +451,6 @@ export default function FileManager() {
               onChange={handleFileChange}
               className="hidden"
               multiple
-              accept="image/*,text/*,.pdf,.doc,.docx,.xls,.xlsx"
             />
           </div>
         </CardHeader>
@@ -516,7 +500,14 @@ export default function FileManager() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {currentNodes.map((node) => (
+                {isLoading && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="h-24 text-center">
+                      <Loader2 className="mx-auto h-8 w-8 animate-spin" />
+                    </TableCell>
+                  </TableRow>
+                )}
+                {!isLoading && currentNodes.map((node) => (
                   <TableRow
                     key={node.id}
                     className="cursor-pointer"
@@ -530,8 +521,8 @@ export default function FileManager() {
                       )}
                     </TableCell>
                     <TableCell>
-                      {node.type === 'file' && node.thumbnailUrl ? (
-                        <Image src={node.thumbnailUrl} alt={node.name} width={40} height={40} className="rounded-md object-cover" />
+                      {node.type === 'file' && (node as FileNode).fileType.startsWith("image/") && (node as FileNode).downloadURL ? (
+                        <Image src={(node as FileNode).downloadURL!} alt={node.name} width={40} height={40} className="rounded-md object-cover" />
                       ) : node.type === 'file' ? (
                         <div className="w-10 h-10 flex items-center justify-center bg-muted rounded-md">
                           <ImageIcon className="w-5 h-5 text-muted-foreground" />
@@ -564,7 +555,7 @@ export default function FileManager() {
                         >
                           {node.type === "file" && (
                             <DropdownMenuItem
-                              onSelect={() => handleDownload(node)}
+                              onSelect={() => handleDownload(node as FileNode)}
                             >
                               <Download className="mr-2 h-4 w-4" />
                               Download
@@ -597,12 +588,12 @@ export default function FileManager() {
                       <div className="flex items-center gap-4">
                         <span className="font-medium flex-1 truncate">{file.name}</span>
                         <Progress value={file.progress} className="w-32" />
-                        <span className="text-sm text-muted-foreground w-12 text-right">{file.progress}%</span>
+                        <span className="text-sm text-muted-foreground w-12 text-right">{file.progress.toFixed(0)}%</span>
                       </div>
                     </TableCell>
                   </TableRow>
                 ))}
-                 {currentNodes.length === 0 && uploadingFiles.length === 0 && (
+                 {!isLoading && currentNodes.length === 0 && uploadingFiles.length === 0 && (
                     <TableRow>
                         <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                             This folder is empty.

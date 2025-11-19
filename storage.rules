@@ -1,12 +1,23 @@
 rules_version = '2';
 
-// Craft rules based on data in your Firestore database
-// allow write: if firestore.get(
-//    /databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin;
 service firebase.storage {
   match /b/{bucket}/o {
-    match /{allPaths=**} {
-      allow read, write: if false;
+    // Path-based security: Files are stored in a user-specific folder.
+    // The path contains the user's UID, ensuring they can only access their own files.
+    match /users/{userId}/files/{allPaths=**} {
+      // isOwner function validates that the requesting user's UID matches the {userId} in the path.
+      function isOwner(userId) {
+        return request.auth != null && request.auth.uid == userId;
+      }
+
+      // Allow read access (downloads) only to the owner of the file.
+      allow read: if isOwner(userId);
+
+      // Allow write access (uploads, updates, deletes) only to the owner.
+      // We also check the file size and content type to prevent malicious uploads.
+      allow write: if isOwner(userId)
+                    && request.resource.size < 5 * 1024 * 1024 // Max 5MB
+                    && request.resource.contentType.matches('image/.*|application/pdf|text/.*');
     }
   }
 }
