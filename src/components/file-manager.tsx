@@ -88,7 +88,7 @@ export interface FileSystemNode {
   path: string;
   userId: string;
   size?: number;
-  lastModified: Date;
+  lastModified: Date | Timestamp;
   downloadURL?: string;
   storagePath?: string;
 }
@@ -158,8 +158,8 @@ export default function FileManager() {
 
   const currentNodes = useMemo(() => {
     const combined = [
-        ...(foldersData || []).map(f => ({ ...f, lastModified: (f.lastModified as any).toDate() })),
-        ...(filesData || []).map(f => ({ ...f, lastModified: (f.lastModified as any).toDate() }))
+        ...(foldersData || []).map(f => ({ ...f, lastModified: (f.lastModified as any)?.toDate ? (f.lastModified as any).toDate() : new Date() })),
+        ...(filesData || []).map(f => ({ ...f, lastModified: (f.lastModified as any)?.toDate ? (f.lastModified as any).toDate() : new Date() }))
     ];
 
     return combined.sort((a, b) => {
@@ -197,12 +197,12 @@ export default function FileManager() {
   const handleCreateFolder = async () => {
     if (!inputValue.trim() || !user) return;
     
-    const newFolder: Omit<FolderNode, 'id'> = {
+    const newFolder: Omit<FolderNode, 'id' | 'lastModified'> & { lastModified: any } = {
       name: inputValue,
       type: "folder",
       path: currentPathString,
       userId: user.uid,
-      lastModified: serverTimestamp() as any,
+      lastModified: serverTimestamp(),
     };
     try {
       await addDoc(collection(firestore, `users/${user.uid}/folders`), newFolder);
@@ -318,14 +318,14 @@ export default function FileManager() {
         },
         async () => {
           const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-          const fileDoc: Omit<FileNode, 'id'> = {
+          const fileDoc: Omit<FileNode, 'id' | 'lastModified'> & { lastModified: any } = {
             name: file.name,
             type: "file",
             path: currentPathString,
             userId: user.uid,
             size: file.size,
             fileType: file.type,
-            lastModified: serverTimestamp() as any,
+            lastModified: serverTimestamp(),
             downloadURL,
             storagePath: filePath,
           };
@@ -536,7 +536,7 @@ export default function FileManager() {
                         : ""}
                     </TableCell>
                     <TableCell className="hidden sm:table-cell text-muted-foreground">
-                      {format(node.lastModified, "PPp")}
+                      {node.lastModified instanceof Date && format(node.lastModified, "PPp")}
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
