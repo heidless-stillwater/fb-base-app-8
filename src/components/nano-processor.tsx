@@ -7,6 +7,8 @@ import {
   uploadBytesResumable,
   getDownloadURL,
 } from 'firebase/storage';
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { v4 as uuidv4 } from 'uuid';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -36,9 +38,11 @@ import {
   X,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useUser, useStorage } from '@/firebase';
+import { useUser, useStorage, useFirestore } from '@/firebase';
 import { Progress } from '@/components/ui/progress';
 import { transformImage } from '@/ai/flows/transform-image-flow';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 const styleOptions = [
   'gothic style',
@@ -67,6 +71,7 @@ export default function NanoProcessor() {
   const { toast } = useToast();
   const { user } = useUser();
   const storage = useStorage();
+  const firestore = useFirestore();
 
   useEffect(() => {
     setPrompt(style);
@@ -93,6 +98,12 @@ export default function NanoProcessor() {
     }
   };
 
+  const dataUriToBlob = async (dataUri: string) => {
+    const response = await fetch(dataUri);
+    const blob = await response.blob();
+    return blob;
+  };
+
   const handleTransform = async () => {
     if (!originalImage || !prompt.trim() || !user) {
       toast({
@@ -105,35 +116,112 @@ export default function NanoProcessor() {
     setIsLoading(true);
     setError(null);
     setTransformedImage(null);
+    setUploadProgress(0);
 
     try {
+      // 1. Upload original image
+      toast({ title: 'Step 1/4: Uploading Original Image...'});
+      const originalFile = originalImage.file;
+      const timestamp = Date.now();
+      const originalFileName = `${timestamp}-original-${originalFile.name}`;
+      const originalStoragePath = `user-uploads/${user.uid}/${originalFileName}`;
+      const originalStorageRef = storageRef(storage, originalStoragePath);
+      const originalUploadTask = uploadBytesResumable(originalStorageRef, originalFile);
+      
+      const originalImageUrl = await new Promise<string>((resolve, reject) => {
+        originalUploadTask.on(
+          'state_changed',
+          (snapshot) => {
+            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 50; // 0-50% progress
+            setUploadProgress(progress);
+          },
+          reject,
+          async () => {
+            const url = await getDownloadURL(originalUploadTask.snapshot.ref);
+            resolve(url);
+          }
+        );
+      });
+      toast({ title: 'Step 2/4: Transforming Image with AI...'});
+      setUploadProgress(50);
+
+
+      // 2. Transform the image
       const result = await transformImage({
         photoDataUri: originalImage.url,
         prompt: prompt,
         testMode: testMode,
       });
-
       setTransformedImage(result.transformedImageUrl);
+      toast({ title: 'Step 3/4: Uploading Transformed Image...'});
+
+      // 3. Upload transformed image
+      const transformedBlob = await dataUriToBlob(result.transformedImageUrl);
+      const transformedFileName = `${timestamp}-transformed-${originalFile.name}`;
+      const transformedStoragePath = `user-uploads/${user.uid}/${transformedFileName}`;
+      const transformedStorageRef = storageRef(storage, transformedStoragePath);
+      const transformedUploadTask = uploadBytesResumable(transformedStorageRef, transformedBlob);
+
+      const transformedImageUrl = await new Promise<string>((resolve, reject) => {
+        transformedUploadTask.on(
+          'state_changed',
+          (snapshot) => {
+            const progress = 50 + (snapshot.bytesTransferred / snapshot.totalBytes) * 50; // 50-100% progress
+            setUploadProgress(progress);
+          },
+          reject,
+          async () => {
+            const url = await getDownloadURL(transformedUploadTask.snapshot.ref);
+            resolve(url);
+          }
+        );
+      });
+      toast({ title: 'Step 4/4: Saving Record...'});
+
+      // 4. Save record to Firestore
+      const nanoRecordData = {
+          userId: user.uid,
+          originalImageUrl: originalImageUrl,
+          transformedImageUrl: transformedImageUrl,
+          originalFileName: originalFile.name,
+          timestamp: serverTimestamp(),
+      };
+      const nanoRecordsCollection = collection(firestore, `users/${user.uid}/nanoRecords`);
+      
+      await addDoc(nanoRecordsCollection, nanoRecordData)
+        .catch(error => {
+          console.error("Error creating nanoRecord: ", error);
+           const permissionError = new FirestorePermissionError({
+              path: nanoRecordsCollection.path,
+              operation: 'create',
+              requestResourceData: nanoRecordData,
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        });
+
       toast({
         title: 'Transformation Complete!',
-        description: 'Your image has been transformed.',
+        description: 'Your image has been transformed and saved.',
       });
+
     } catch (e: any) {
       console.error(e);
-      setError(e.message || 'An error occurred during transformation.');
+      setError(e.message || 'An error occurred during the process.');
       toast({
         variant: 'destructive',
-        title: 'Transformation Failed',
-        description: e.message || 'Could not transform image.',
+        title: 'Process Failed',
+        description: e.message || 'Could not complete the transformation process.',
       });
     } finally {
       setIsLoading(false);
+      setUploadProgress(null);
     }
   };
 
   const clearState = () => {
     setOriginalImage(null);
     setTransformedImage(null);
+    setError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -153,7 +241,7 @@ export default function NanoProcessor() {
             <Label htmlFor="image-upload">Original Image</Label>
             <div
               className="relative border-2 border-dashed border-muted rounded-lg p-4 text-center cursor-pointer hover:border-primary"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => !isLoading && fileInputRef.current?.click()}
             >
               <Input
                 id="image-upload"
@@ -173,18 +261,19 @@ export default function NanoProcessor() {
                     height={400}
                     className="rounded-md mx-auto max-h-60 w-auto"
                   />
-                  <Button
-                    variant="destructive"
-                    size="icon"
-                    className="absolute top-1 right-1 h-6 w-6"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      clearState();
-                    }}
-                    disabled={isLoading}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
+                   { !isLoading &&
+                    <Button
+                        variant="destructive"
+                        size="icon"
+                        className="absolute top-1 right-1 h-6 w-6"
+                        onClick={(e) => {
+                        e.stopPropagation();
+                        clearState();
+                        }}
+                    >
+                        <X className="h-4 w-4" />
+                    </Button>
+                   }
                 </div>
               ) : (
                 <div className="flex flex-col items-center gap-2 text-muted-foreground">
@@ -235,7 +324,7 @@ export default function NanoProcessor() {
         </CardContent>
         <CardFooter className="flex flex-col items-start gap-4">
            <Button onClick={handleTransform} disabled={isLoading || !originalImage || !prompt.trim()}>
-            {isLoading && !uploadProgress ? (
+            {isLoading ? (
               <Loader2 className="animate-spin" />
             ) : (
               <Wand2 className="mr-2 h-4 w-4" />
@@ -254,8 +343,11 @@ export default function NanoProcessor() {
         </CardHeader>
         <CardContent>
           <div className="aspect-square border-2 border-dashed border-muted rounded-lg flex items-center justify-center bg-muted/50">
-            {isLoading && !uploadProgress && (
-              <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            {isLoading && (
+              <div className='flex flex-col items-center gap-4 text-muted-foreground'>
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                <p>Transforming in progress...</p>
+              </div>
             )}
             {!isLoading && transformedImage && (
               <Image
@@ -290,3 +382,4 @@ export default function NanoProcessor() {
       </Card>
     </div>
   );
+}
