@@ -43,7 +43,7 @@ interface NanoRecord {
   };
 }
 
-type ViewMode = 'list' | 'detail' | 'large' | 'medium' | 'small';
+type ViewMode = 'list' | 'detail' | 'large' | 'medium' | 'small' | 'extra-large';
 
 const handleDownload = async (imageUrl: string, fileName: string, toast: ReturnType<typeof useToast>['toast']) => {
     try {
@@ -283,6 +283,7 @@ export default function NanoGallery() {
   const viewClasses: Record<ViewMode, string> = {
     list: 'flex flex-col gap-1',
     detail: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
+    'extra-large': 'grid-cols-1 sm:grid-cols-2',
     large: 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3',
     medium: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4',
     small: 'grid-cols-3 sm:grid-cols-4 md:grid-cols-6',
@@ -310,6 +311,7 @@ export default function NanoGallery() {
                 <DropdownMenuRadioGroup value={view} onValueChange={(v) => setView(v as ViewMode)}>
                     <DropdownMenuRadioItem value="list">List</DropdownMenuRadioItem>
                     <DropdownMenuRadioItem value="detail">Details</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="extra-large">Extra Large Grid</DropdownMenuRadioItem>
                     <DropdownMenuRadioItem value="large">Large Grid</DropdownMenuRadioItem>
                     <DropdownMenuRadioItem value="medium">Medium Grid</DropdownMenuRadioItem>
                     <DropdownMenuRadioItem value="small">Small Grid</DropdownMenuRadioItem>
